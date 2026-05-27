@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "4MH3VfOAkUg=",
+  "success": true,
+  "projectFilePath": "C:\\Users\\marti\\Documents\\project-bullseye\\backend\\BullseyeAPI\\BullseyeAPI\\BullseyeAPI.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\marti\\.nuget\\packages\\microsoft.aspnetcore.openapi\\9.0.13\\microsoft.aspnetcore.openapi.9.0.13.nupkg.sha512",
+    "C:\\Users\\marti\\.nuget\\packages\\microsoft.openapi\\1.6.17\\microsoft.openapi.1.6.17.nupkg.sha512"
+  ],
+  "logs": []
+}

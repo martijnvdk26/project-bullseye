@@ -1,0 +1,6 @@
+@BullseyeAPI_HostAddress = http://localhost:5245
+
+GET {{BullseyeAPI_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
