@@ -1,0 +1,38 @@
+services:
+  database:
+    image: postgres:15
+    container_name: bullseye-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: bullseye_admin
+      POSTGRES_PASSWORD: SecretPassword123!
+      POSTGRES_DB: bullseyedb
+    ports:
+      - "5432:5432"
+    volumes:
+      - bullseye_db_data:/var/lib/postgresql/data
+    networks:
+      - bullseye-network
+
+  pgadmin:
+    image: dpage/pgadmin4
+    container_name: bullseye-pgadmin
+    restart: unless-stopped
+    environment:
+      PGADMIN_DEFAULT_EMAIL: martijnvanderkooi@gmail.com
+      PGADMIN_DEFAULT_PASSWORD: Binky-sept23
+    ports:
+      - "81:80"
+    networks:
+      - bullseye-network
+    depends_on:
+      - database
+
+volumes:
+  bullseye_db_data:
+    name: bullseye_db_data
+
+networks:
+  bullseye-network:
+    name: bullseye-network
+    driver: bridge
