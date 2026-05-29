@@ -17,6 +17,18 @@ public class PlayerController : ControllerBase
         _playerService = playerService;
     }
 
+    [HttpPost("register")]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    {
+        var result = await _playerService.RegisterAsync(request);
+        if (result == null)
+        {
+            // Error 400 if email exists in database
+            return BadRequest(new { message = "Registratie is mislukt. Dit e-mailadres is mogelijk al in gebruik." });
+        }
+        return Ok(result);
+    }
+
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)
     {

@@ -14,13 +14,37 @@ public class PlayerService : IPlayerService
         _playerRepository = playerRepository;
     }
 
+    public async Task<PlayerDto?> RegisterAsync(RegisterRequest request)
+    {
+        //Check if email has already been used
+        var existingPlayer = await _playerRepository.GetByEmailAsync(request.Email);
+        if (existingPlayer != null) return null; //E-mail already exists
+        
+        // Hashing the password with bcrypt
+        string hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
+        
+        // Create new player
+        var player = new Player
+        {
+            Name = request.Name,
+            Email = request.Email.ToLower(),
+            Password = hashedPassword,
+            CreatedAt = DateTime.UtcNow
+        };
+        
+        await _playerRepository.AddAsync(player);
+        await _playerRepository.SaveChangesAsync();
+        
+        return MapToDto(player);
+    }
+
     public async Task<PlayerDto?> LoginAsync(LoginRequest request)
     {
-        // 1. Zoek jouw speler op via e-mail
+        // Search for player via email
         var player = await _playerRepository.GetByEmailAsync(request.Email);
         if (player == null || string.IsNullOrEmpty(player.Password)) return null;
 
-        // 2. Verifieer het wachtwoord via BCrypt
+        // BCrypt verifies the provided password against the stored hash
         bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, player.Password);
         
         if (!isPasswordValid) return null;
@@ -36,7 +60,7 @@ public class PlayerService : IPlayerService
         return MapToDto(player);
     }
 
-    // Helper om data netjes om te zetten
+    // Helper to tidy up data
     private PlayerDto MapToDto(Player player)
     {
         return new PlayerDto
