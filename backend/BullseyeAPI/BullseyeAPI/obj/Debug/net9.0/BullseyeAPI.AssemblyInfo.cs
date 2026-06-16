@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("BullseyeAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+5c06a14df48af504afe7da722e5601db328b20c0")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e2a19baaec9c08510b0920fd2d407a405d607a7b")]
 [assembly: System.Reflection.AssemblyProductAttribute("BullseyeAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BullseyeAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]
