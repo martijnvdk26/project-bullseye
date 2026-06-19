@@ -1,0 +1,8 @@
+<div class="player-card" [class.active-turn]="player.isActive">
+  <h2 class="player-name">{{ player.name }}</h2>
+  <div class="score-display"><span class="points">{{ player.score }}</span></div>
+
+  @if (player.score <= 170 && player.isActive) {
+    <div class="checkout-hint">{{ getCheckoutHint(player.score) }}</div>
+  }
+</div>

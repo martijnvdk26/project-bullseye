@@ -1,0 +1,40 @@
+<div class="match-container">
+
+  <button class="back-link btn-leave" (click)="leaveMatch()">← Leave Match</button>
+
+  <header class="match-header">
+    <h1>Bullseye - {{ variant }}</h1>
+
+    @if (sessionCode) {
+      <div class="pin-badge" style="margin-bottom: 1rem; font-size: 1.5rem; font-weight: bold; color: #e74c3c; letter-spacing: 2px;">
+        PIN: {{ sessionCode }}
+      </div>
+    }
+
+    <div class="sets-legs-display">
+      <span class="badge">Sets: {{ player1.sets }} - {{ player2.sets }}</span>
+      <span class="badge">Legs: {{ player1.legs }} - {{ player2.legs }}</span>
+    </div>
+  </header>
+
+  <div class="broadcast-layout">
+
+    <app-stats-panel style="flex: 1" [player]="player1"></app-stats-panel>
+
+    <div class="players-board">
+
+      <app-player-card [player]="player1"></app-player-card>
+
+      <div class="vs-divider">VS</div>
+
+      <app-player-card [player]="player2"></app-player-card>
+
+    </div>
+
+    <app-stats-panel style="flex: 1" [player]="player2"></app-stats-panel>
+
+  </div>
+
+  <app-numpad (scoreSubmitted)="processSubmittedScore($event)"></app-numpad>
+
+</div>

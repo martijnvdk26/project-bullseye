@@ -1,0 +1,47 @@
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <div class="auth-header">
+      <h2>Project Bullseye</h2>
+      <p>Sign in to view your stats and play</p>
+    </div>
+
+    <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="auth-form">
+
+      <div class="form-group">
+        <label for="email">Email Address</label>
+        <input
+          id="email"
+          type="email"
+          formControlName="email"
+          placeholder="player@bullseye.com"
+          [class.is-invalid]="loginForm.get('email')?.invalid && loginForm.get('email')?.touched"
+        >
+        @if (loginForm.get('email')?.invalid && loginForm.get('email')?.touched) {
+          <span class="validation-error">Please enter a valid email.</span>
+        }
+      </div>
+
+      <div class="form-group">
+        <label for="password">Password</label>
+        <input
+          id="password"
+          type="password"
+          formControlName="password"
+          [class.is-invalid]="loginForm.get('password')?.invalid && loginForm.get('password')?.touched"
+        >
+      </div>
+
+      @if (errorMessage) {
+        <div class="api-error">{{ errorMessage }}</div>
+      }
+
+      <button type="submit" class="btn-primary" [disabled]="loginForm.invalid">
+        Log In
+      </button>
+    </form>
+
+    <div class="auth-footer">
+      <p>No account? <a routerLink="/guest-lobby">Play as a Guest via PIN</a></p>
+    </div>
+  </div>
+</div>

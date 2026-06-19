@@ -1,0 +1,17 @@
+<div class="numpad-container">
+  <div class="input-display">{{ currentInput || '0' }}</div>
+  <div class="keypad">
+    <button class="key" (click)="appendNumber(1)">1</button>
+    <button class="key" (click)="appendNumber(2)">2</button>
+    <button class="key" (click)="appendNumber(3)">3</button>
+    <button class="key" (click)="appendNumber(4)">4</button>
+    <button class="key" (click)="appendNumber(5)">5</button>
+    <button class="key" (click)="appendNumber(6)">6</button>
+    <button class="key" (click)="appendNumber(7)">7</button>
+    <button class="key" (click)="appendNumber(8)">8</button>
+    <button class="key" (click)="appendNumber(9)">9</button>
+    <button class="key key-clr" (click)="clearInput()">CLR</button>
+    <button class="key" (click)="appendNumber(0)">0</button>
+    <button class="key key-ent" (click)="submit()">ENT</button>
+  </div>
+</div>

@@ -2,8 +2,15 @@
 using BullseyeAPI.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using System.Threading.Tasks;
 
 namespace BullseyeAPI.Controllers;
+
+// Defines the expected JSON structure from the Angular frontend
+public class CreateGuestSessionRequest
+{
+    public string PlayerName { get; set; } = string.Empty;
+}
 
 [ApiController]
 [Route("api/guest")]
@@ -18,26 +25,27 @@ public class GuestSessionController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<IActionResult> CreateSession()
+    public async Task<IActionResult> CreateSession([FromBody] CreateGuestSessionRequest request)
     {
-        var result = await _guestSessionService.CreateSessionAsync();
+        // Passes the player name to the service layer for session creation
+        var result = await _guestSessionService.CreateSessionAsync(request.PlayerName);
         return Ok(result);
     }
 
     [HttpGet("{code}")]
-    public async Task<IActionResult> GetSession(string code)
+    public async Task<IActionResult> GetSession(string code, [FromQuery] string? playerName = null)
     {
-        var result = await _guestSessionService.GetSessionByCodeAsync(code);
+        // Passes the session code and the optional opponent name to the service layer
+        var result = await _guestSessionService.GetSessionByCodeAsync(code, playerName);
         
         if (result == null)
         {
-            return NotFound(new { message = "Sessiecode niet gevonden." });
+            return NotFound(new { message = "Session code not found." });
         }
 
         return Ok(result);
     }
 
-    // Nieuw endpoint: POST /api/guest/{code}/game
     [HttpPost("{code}/game")]
     public async Task<IActionResult> StartGame(string code, [FromBody] StartGameRequest request)
     {
@@ -45,7 +53,7 @@ public class GuestSessionController : ControllerBase
         
         if (result == null)
         {
-            return NotFound(new { message = "Sessiecode niet gevonden. Kan geen wedstrijd starten." });
+            return NotFound(new { message = "Session code not found. Cannot start match." });
         }
 
         return Ok(result);

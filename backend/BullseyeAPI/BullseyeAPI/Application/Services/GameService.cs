@@ -4,6 +4,10 @@ using BullseyeAPI.Domain.Entities;
 using BullseyeAPI.Domain.Rules;
 using Microsoft.AspNetCore.SignalR;
 using BullseyeAPI.Hubs;
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 
 namespace BullseyeAPI.Application.Services;
 
@@ -26,13 +30,12 @@ public class GameService : IGameService
         _hubContext = hubContext;
     }
 
-    // --- 0. WEDSTRIJD OPHALEN (Voor de frontend) ---
     public async Task<GameDto?> GetGameAsync(int gameId)
     {
         var game = await _gameRepository.GetByIdAsync(gameId);
         if (game == null) return null;
 
-        // Zet de database beurten (Turns) om naar DTO's voor de frontend
+        // Maps the database turns to DTOs for the frontend
         var turnDtos = game.Turns.OrderBy(t => t.ThrownAt).Select(t => new TurnDto
         {
             PlayerId = t.PlayerId,
@@ -40,7 +43,7 @@ public class GameService : IGameService
             IsBust = t.IsBust,
             ScoreAfter = t.IsBust ? t.ScoreBefore : t.ScoreBefore - t.Scores.Sum(s => s.Points),
             
-            // Zet de bijbehorende pijlen (Scores) om naar DTO's
+            // Maps the corresponding darts to DTOs
             Scores = t.Scores.OrderBy(s => s.DartNumber).Select(s => new ScoreDto
             {
                 Points = s.Points,
@@ -49,7 +52,7 @@ public class GameService : IGameService
             }).ToList()
         }).ToList();
 
-        // Geef het perfect gevormde DTO terug aan de Controller
+        // Returns the properly formatted DTO to the controller
         return new GameDto
         {
             Id = game.Id,
@@ -60,7 +63,6 @@ public class GameService : IGameService
         };
     }
 
-    // --- 1. INVOER PIJL-VOOR-PIJL (Voor de AI Camera of losse invoer) ---
     public async Task<bool> SubmitScoreAsync(SubmitScoreRequest request)
     {
         var game = await _gameRepository.GetByIdAsync(request.GameId);
@@ -68,7 +70,7 @@ public class GameService : IGameService
 
         var currentTurn = game.Turns.LastOrDefault(t => t.PlayerId == request.PlayerId && t.Scores.Count < 3 && !t.IsBust);
         
-        // Nieuwe beurt aanmaken als er nog geen is, of de vorige vol is
+        // Initializes a new turn if none exists, or if the previous one is completed
         if (currentTurn == null)
         {
             var lastTurn = game.Turns.Where(t => t.PlayerId == request.PlayerId).LastOrDefault();
@@ -85,50 +87,65 @@ public class GameService : IGameService
             game.Turns.Add(currentTurn);
         }
 
-        // Foutafhandeling: Controleer of deze pijl al gegooid is in deze beurt
+        // Auto-calculates the dart number if the frontend does not provide one
+        if (request.DartNumber <= 0)
+        {
+            request.DartNumber = currentTurn.Scores.Count + 1;
+        }
+
+        // Prevents duplicate dart entries within the same turn
         if (currentTurn.Scores.Any(s => s.DartNumber == request.DartNumber))
         {
-            throw new ArgumentException($"Pijl nummer {request.DartNumber} is al gegooid in deze beurt!");
+            throw new ArgumentException($"Dart number {request.DartNumber} has already been thrown in this turn!");
         }
 
         int currentTurnTotal = currentTurn.Scores.Sum(s => s.Points);
-        int scoreVoorDezeWorp = currentTurn.ScoreBefore - currentTurnTotal;
+        int scoreBeforeThisThrow = currentTurn.ScoreBefore - currentTurnTotal;
 
-        // Check voor winst
-        if (_rules.IsWinningThrow(scoreVoorDezeWorp, request.Points, request.IsDouble, game.Variant))
+        // Evaluates a winning throw
+        if (_rules.IsWinningThrow(scoreBeforeThisThrow, request.Points, request.IsDouble, game.Variant))
         {
             game.EndedAt = DateTime.UtcNow;
             game.WinnerId = request.PlayerId;
             currentTurn.Scores.Add(new Score { Points = request.Points, Segment = request.Segment, DartNumber = request.DartNumber });
             
+            // Forces the database to explicitly record the remaining score as zero
+            currentTurn.ScoreAfter = 0;
+            
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
-            await UpdatePlayerStatsAsync(request.PlayerId, game); // Update statistieken!
+            await UpdatePlayerStatsAsync(request.PlayerId, game); 
         }
-        // Check voor bust
-        else if (!_rules.IsValidScore(scoreVoorDezeWorp, request.Points, request.IsDouble, game.Variant))
+        // Evaluates a bust throw
+        else if (!_rules.IsValidScore(scoreBeforeThisThrow, request.Points, request.IsDouble, game.Variant))
         {
             currentTurn.IsBust = true;
             currentTurn.Scores.Add(new Score { Points = request.Points, Segment = request.Segment, DartNumber = request.DartNumber });
             
+            // Reverts the remaining score due to the bust explicitly
+            currentTurn.ScoreAfter = currentTurn.ScoreBefore;
+            
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
         }
-        // Geldige worp
+        // Evaluates a valid throw
         else
         {
             currentTurn.Scores.Add(new Score { Points = request.Points, Segment = request.Segment, DartNumber = request.DartNumber });
+            
+            // Forces the database to explicitly record the exact remaining score
+            currentTurn.ScoreAfter = currentTurn.ScoreBefore - currentTurn.Scores.Sum(s => s.Points);
+            
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
         }
 
-        // Live seintje naar de Angular frontend
+        // Broadcasts a live update signal to the Angular frontend
         await _hubContext.Clients.All.SendAsync("GameUpdated", game.Id);
 
         return true;
     }
 
-    // --- 2. INVOER COMPLETE BEURT (Voor handmatig typen op de bank) ---
     public async Task<bool> SubmitManualTurnAsync(SubmitTurnRequest request)
     {
         var game = await _gameRepository.GetByIdAsync(request.GameId);
@@ -146,24 +163,25 @@ public class GameService : IGameService
             Scores = new List<Score>()
         };
 
-        // Regels controleren op basis van de totale score
-        if (request.TotalPoints == currentScore) // Winst!
+        // Validates rules based on the total score of the manual turn
+        if (request.TotalPoints == currentScore) 
         {
             game.EndedAt = DateTime.UtcNow;
             game.WinnerId = request.PlayerId;
             newTurn.Scores.Add(new Score { Points = request.TotalPoints, Segment = "Manual", DartNumber = 1 });
             
-            // Trucje: Vul de beurt af met dummy-pijlen zodat de rest van de logica klopt
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 2 });
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 3 });
+            
+            newTurn.ScoreAfter = 0;
             
             game.Turns.Add(newTurn);
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
             
-            await UpdatePlayerStatsAsync(request.PlayerId, game); // Update statistieken!
+            await UpdatePlayerStatsAsync(request.PlayerId, game);
         }
-        else if (request.TotalPoints > currentScore || (currentScore - request.TotalPoints) == 1) // Bust!
+        else if (request.TotalPoints > currentScore || (currentScore - request.TotalPoints) == 1) 
         {
             newTurn.IsBust = true;
             newTurn.Scores.Add(new Score { Points = request.TotalPoints, Segment = "Manual Bust", DartNumber = 1 });
@@ -171,35 +189,38 @@ public class GameService : IGameService
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 2 });
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 3 });
             
+            newTurn.ScoreAfter = newTurn.ScoreBefore;
+            
             game.Turns.Add(newTurn);
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
         }
-        else // Geldige beurt
+        else 
         {
             newTurn.Scores.Add(new Score { Points = request.TotalPoints, Segment = "Manual", DartNumber = 1 });
             
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 2 });
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 3 });
             
+            newTurn.ScoreAfter = newTurn.ScoreBefore - request.TotalPoints;
+            
             game.Turns.Add(newTurn);
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
         }
 
-        // Live seintje naar de Angular frontend
+        // Broadcasts a live update signal to the Angular frontend
         await _hubContext.Clients.All.SendAsync("GameUpdated", game.Id);
 
         return true;
     }
 
-    // --- 3. REKENMACHINE SPELERSTATISTIEKEN ---
     private async Task UpdatePlayerStatsAsync(int playerId, Game game)
     {
         var player = await _playerRepository.GetByIdAsync(playerId);
         if (player == null) return;
 
-        // 1. Highest Finish berekenen
+        // Calculates the highest checkout finish
         var winningTurn = game.Turns.OrderByDescending(t => t.ThrownAt).FirstOrDefault();
         if (winningTurn != null)
         {
@@ -210,14 +231,14 @@ public class GameService : IGameService
             }
         }
 
-        // 2. Three-Dart Average berekenen
+        // Calculates the three-dart average
         var playerTurns = game.Turns.Where(t => t.PlayerId == playerId).ToList();
         int totalPoints = 0;
         int totalDarts = 0;
 
         foreach (var turn in playerTurns)
         {
-            // Bust pijlen leveren geen punten op, maar tellen wél mee als gegooid
+            // Bust darts yield zero points but still count towards the total thrown darts
             if (!turn.IsBust) totalPoints += turn.Scores.Sum(s => s.Points);
             totalDarts += turn.Scores.Count; 
         }

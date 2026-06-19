@@ -1,87 +1,106 @@
 ﻿using BullseyeAPI.Application.DTOs;
 using BullseyeAPI.Application.Interfaces;
 using BullseyeAPI.Domain.Entities;
+using Microsoft.EntityFrameworkCore;
+using System;
+using System.Linq;
+using System.Threading.Tasks;
+using BullseyeAPI.Infrastructure.Data;
 
 namespace BullseyeAPI.Application.Services;
 
 public class GuestSessionService : IGuestSessionService
 {
-    private readonly IGuestSessionRepository _sessionRepository;
-    private readonly IGameRepository _gameRepository;
+    private readonly AppDbContext _context;
 
-    // Constructor met beide repositories
-    public GuestSessionService(IGuestSessionRepository sessionRepository, IGameRepository gameRepository)
+    public GuestSessionService(AppDbContext context)
     {
-        _sessionRepository = sessionRepository;
-        _gameRepository = gameRepository;
+        _context = context;
     }
 
-    public async Task<GuestSessionDto> CreateSessionAsync()
+    public async Task<object> CreateSessionAsync(string playerName)
     {
+        // Generates a random 4-character PIN for the guest session
+        var code = GenerateRandomPin(); 
+        
+        // Creates a new session entity and assigns the creator's name
+        var session = new GuestSession
+        {
+            SessionCode = code,
+            Player1Name = playerName,
+            CreatedAt = DateTime.UtcNow
+        };
+
+        _context.GuestSessions.Add(session);
+        await _context.SaveChangesAsync();
+
+        // Returns the generated code and player name to the frontend
+        return new { sessionCode = session.SessionCode, player1Name = session.Player1Name };
+    }
+
+    public async Task<object?> GetSessionByCodeAsync(string code, string? playerName = null)
+    {
+        // Retrieves the requested session from the database
+        var session = await _context.GuestSessions.FirstOrDefaultAsync(s => s.SessionCode == code);
+        if (session == null) return null;
+
+        // Registers the second player if a name is provided and the slot is empty
+        if (!string.IsNullOrEmpty(playerName) && string.IsNullOrEmpty(session.Player2Name))
+        {
+            // Prevents the creator from joining their own game as the second player
+            if (session.Player1Name != playerName) 
+            {
+                session.Player2Name = playerName;
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        // Returns the session details including both player names
+        return new { 
+            sessionCode = session.SessionCode, 
+            player1Name = session.Player1Name, 
+            player2Name = session.Player2Name 
+        };
+    }
+
+    public async Task<object?> StartGameForSessionAsync(string code, StartGameRequest request)
+    {
+        // Retrieves the session from the database, including its associated games
+        var session = await _context.GuestSessions
+            .Include(s => s.Games)
+            .FirstOrDefaultAsync(s => s.SessionCode == code);
+
+        if (session == null) return null;
+
+        // Checks if a game has already been created for this session to prevent duplicate matches
+        if (session.Games.Any())
+        {
+            var existingGame = session.Games.First();
+            // Returns the existing game ID to ensure both players join the exact same match
+            return new { id = existingGame.Id, variant = existingGame.Variant };
+        }
+
+        // Creates a genuine new game entity using the requested variant
+        var newGame = new Game
+        {
+            Variant = string.IsNullOrEmpty(request.Variant) ? "501" : request.Variant,
+            StartedAt = DateTime.UtcNow
+        };
+
+        // Links the newly created match to this specific guest session
+        session.Games.Add(newGame);
+        
+        // Saves the changes to PostgreSQL, which generates a unique game ID
+        await _context.SaveChangesAsync();
+
+        // Returns the real database ID to the Angular frontend for navigation
+        return new { id = newGame.Id, variant = newGame.Variant }; 
+    }
+    
+    private string GenerateRandomPin()
+    {
+        // Creates a random 4-digit number to serve as the session PIN
         var random = new Random();
-        string code = $"BULL-{random.Next(1000, 9999)}";
-
-        var session = new GuestSession { SessionCode = code };
-        await _sessionRepository.AddAsync(session);
-        await _sessionRepository.SaveChangesAsync();
-
-        return new GuestSessionDto
-        {
-            Id = session.Id,
-            SessionCode = session.SessionCode,
-            CreatedAt = session.CreatedAt,
-            Games = new List<GameDto>()
-        };
-    }
-
-    public async Task<GuestSessionDto?> GetSessionByCodeAsync(string code)
-    {
-        var session = await _sessionRepository.GetByCodeAsync(code.ToUpper());
-        if (session == null) return null;
-
-        var gameDtos = session.Games.Select(g => new GameDto
-        {
-            Id = g.Id,
-            Variant = g.Variant,
-            StartedAt = g.StartedAt,
-            WinnerId = g.WinnerId
-        }).ToList();
-
-        return new GuestSessionDto
-        {
-            Id = session.Id,
-            SessionCode = session.SessionCode,
-            CreatedAt = session.CreatedAt,
-            Games = gameDtos
-        };
-    }
-
-    // Nieuwe implementatie:
-    public async Task<GameDto?> StartGameForSessionAsync(string code, StartGameRequest request)
-    {
-        // 1. Zoek de bestaande gastsessie op via de unieke code
-        var session = await _sessionRepository.GetByCodeAsync(code.ToUpper());
-        if (session == null) return null;
-
-        // 2. Maak een nieuwe Game entiteit aan gekoppeld aan deze sessie
-        var game = new Game
-        {
-            Variant = request.Variant,
-            StartedAt = DateTime.UtcNow,
-            GuestSessionId = session.Id
-        };
-
-        // 3. Sla de game op via de game repository
-        await _gameRepository.AddAsync(game);
-        await _gameRepository.SaveChangesAsync();
-
-        // 4. Geef het resultaat netjes terug als GameDto
-        return new GameDto
-        {
-            Id = game.Id,
-            Variant = game.Variant,
-            StartedAt = game.StartedAt,
-            WinnerId = game.WinnerId
-        };
+        return random.Next(1000, 9999).ToString();
     }
 }
