@@ -13,6 +13,13 @@ public class GuestSession
     
     // Stores the name of the opponent joining via the PIN
     public string? Player2Name { get; set; }
-    
+
+    // Match rules chosen by the creator before the PIN is shared; the joiner
+    // only ever reads these, never sets them, so both players agree on the
+    // same rules instead of each picking their own in local component state.
+    public string Variant { get; set; } = "501";
+    public int TargetSets { get; set; } = 1;
+    public int TargetLegs { get; set; } = 3;
+
     public ICollection<Game> Games { get; set; } = new List<Game>();
 }

@@ -5,6 +5,9 @@ using BCrypt.Net;
 
 namespace BullseyeAPI.Application.Services;
 
+// Handles registered-account auth (registration/login) and stats lookup -
+// separate from, and not connected to, the anonymous guest-session flow.
+// JWT issuance happens in PlayerController via IJwtTokenService, not here.
 public class PlayerService : IPlayerService
 {
     private readonly IPlayerRepository _playerRepository;
@@ -16,14 +19,11 @@ public class PlayerService : IPlayerService
 
     public async Task<PlayerDto?> RegisterAsync(RegisterRequest request)
     {
-        //Check if email has already been used
         var existingPlayer = await _playerRepository.GetByEmailAsync(request.Email);
-        if (existingPlayer != null) return null; //E-mail already exists
-        
-        // Hashing the password with bcrypt
+        if (existingPlayer != null) return null;
+
         string hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
-        
-        // Create new player
+
         var player = new Player
         {
             Name = request.Name,
@@ -40,13 +40,10 @@ public class PlayerService : IPlayerService
 
     public async Task<PlayerDto?> LoginAsync(LoginRequest request)
     {
-        // Search for player via email
         var player = await _playerRepository.GetByEmailAsync(request.Email);
         if (player == null || string.IsNullOrEmpty(player.Password)) return null;
 
-        // BCrypt verifies the provided password against the stored hash
         bool isPasswordValid = BCrypt.Net.BCrypt.Verify(request.Password, player.Password);
-        
         if (!isPasswordValid) return null;
 
         return MapToDto(player);
@@ -67,6 +64,7 @@ public class PlayerService : IPlayerService
         {
             Id = player.Id,
             Name = player.Name,
+            Email = player.Email,
             AvatarUrl = player.AvatarUrl,
             ThreeDartAverage = player.ThreeDartAverage,
             CheckoutPercentage = player.CheckoutPercentage,

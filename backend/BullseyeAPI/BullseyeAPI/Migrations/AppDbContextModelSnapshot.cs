@@ -33,7 +33,10 @@ namespace BullseyeAPI.Migrations
                     b.Property<DateTime?>("EndedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<int>("GuestSessionId")
+                    b.Property<int?>("GuestSessionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("RegisteredSessionId")
                         .HasColumnType("integer");
 
                     b.Property<DateTime>("StartedAt")
@@ -52,6 +55,8 @@ namespace BullseyeAPI.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("GuestSessionId");
+
+                    b.HasIndex("RegisteredSessionId");
 
                     b.HasIndex("TournamentId");
 
@@ -82,6 +87,16 @@ namespace BullseyeAPI.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<int>("TargetLegs")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetSets")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Variant")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.HasKey("Id");
 
                     b.HasIndex("SessionCode")
@@ -100,6 +115,12 @@ namespace BullseyeAPI.Migrations
 
                     b.Property<string>("AvatarUrl")
                         .HasColumnType("text");
+
+                    b.Property<int>("CheckoutAttempts")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CheckoutHits")
+                        .HasColumnType("integer");
 
                     b.Property<decimal>("CheckoutPercentage")
                         .HasColumnType("numeric");
@@ -126,6 +147,49 @@ namespace BullseyeAPI.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Players");
+                });
+
+            modelBuilder.Entity("BullseyeAPI.Domain.Entities.RegisteredSession", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Player1Id")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("Player2Id")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("SessionCode")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int>("TargetLegs")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TargetSets")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Variant")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Player1Id");
+
+                    b.HasIndex("Player2Id");
+
+                    b.HasIndex("SessionCode")
+                        .IsUnique();
+
+                    b.ToTable("RegisteredSessions");
                 });
 
             modelBuilder.Entity("BullseyeAPI.Domain.Entities.Score", b =>
@@ -256,8 +320,12 @@ namespace BullseyeAPI.Migrations
                     b.HasOne("BullseyeAPI.Domain.Entities.GuestSession", "GuestSession")
                         .WithMany("Games")
                         .HasForeignKey("GuestSessionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("BullseyeAPI.Domain.Entities.RegisteredSession", "RegisteredSession")
+                        .WithMany("Games")
+                        .HasForeignKey("RegisteredSessionId")
+                        .OnDelete(DeleteBehavior.Cascade);
 
                     b.HasOne("BullseyeAPI.Domain.Entities.Tournament", null)
                         .WithMany("Games")
@@ -270,7 +338,27 @@ namespace BullseyeAPI.Migrations
 
                     b.Navigation("GuestSession");
 
+                    b.Navigation("RegisteredSession");
+
                     b.Navigation("Winner");
+                });
+
+            modelBuilder.Entity("BullseyeAPI.Domain.Entities.RegisteredSession", b =>
+                {
+                    b.HasOne("BullseyeAPI.Domain.Entities.Player", "Player1")
+                        .WithMany()
+                        .HasForeignKey("Player1Id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("BullseyeAPI.Domain.Entities.Player", "Player2")
+                        .WithMany()
+                        .HasForeignKey("Player2Id")
+                        .OnDelete(DeleteBehavior.Restrict);
+
+                    b.Navigation("Player1");
+
+                    b.Navigation("Player2");
                 });
 
             modelBuilder.Entity("BullseyeAPI.Domain.Entities.Score", b =>
@@ -339,6 +427,11 @@ namespace BullseyeAPI.Migrations
                 });
 
             modelBuilder.Entity("BullseyeAPI.Domain.Entities.GuestSession", b =>
+                {
+                    b.Navigation("Games");
+                });
+
+            modelBuilder.Entity("BullseyeAPI.Domain.Entities.RegisteredSession", b =>
                 {
                     b.Navigation("Games");
                 });

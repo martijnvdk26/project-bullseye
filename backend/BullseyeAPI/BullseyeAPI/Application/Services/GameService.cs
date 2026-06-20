@@ -11,6 +11,14 @@ using System.Threading.Tasks;
 
 namespace BullseyeAPI.Application.Services;
 
+// Orchestrates a live match: recording darts, detecting busts/checkouts,
+// ending the game, pushing live updates over SignalR, and updating every
+// participating player's lifetime stats once a leg ends.
+//
+// SubmitScoreAsync records one dart at a time; SubmitManualTurnAsync records
+// a whole visit (the numpad's combined 3-dart total) in one call and is what
+// the frontend actually uses. Mixing the two for the same player would merge
+// a later visit into an still-open turn from the other path, so don't.
 public class GameService : IGameService
 {
     private readonly IGameRepository _gameRepository;
@@ -35,15 +43,12 @@ public class GameService : IGameService
         var game = await _gameRepository.GetByIdAsync(gameId);
         if (game == null) return null;
 
-        // Maps the database turns to DTOs for the frontend
         var turnDtos = game.Turns.OrderBy(t => t.ThrownAt).Select(t => new TurnDto
         {
             PlayerId = t.PlayerId,
             ScoreBefore = t.ScoreBefore,
             IsBust = t.IsBust,
             ScoreAfter = t.IsBust ? t.ScoreBefore : t.ScoreBefore - t.Scores.Sum(s => s.Points),
-            
-            // Maps the corresponding darts to DTOs
             Scores = t.Scores.OrderBy(s => s.DartNumber).Select(s => new ScoreDto
             {
                 Points = s.Points,
@@ -52,7 +57,6 @@ public class GameService : IGameService
             }).ToList()
         }).ToList();
 
-        // Returns the properly formatted DTO to the controller
         return new GameDto
         {
             Id = game.Id,
@@ -63,19 +67,24 @@ public class GameService : IGameService
         };
     }
 
+    // Per-dart submission: records ONE dart, attaching to the player's
+    // current turn while it still has fewer than 3 darts. Currently unused
+    // by the frontend (the numpad submits whole turns via
+    // SubmitManualTurnAsync below), kept for a future dart-by-dart UI.
     public async Task<bool> SubmitScoreAsync(SubmitScoreRequest request)
     {
         var game = await _gameRepository.GetByIdAsync(request.GameId);
         if (game == null) return false;
 
         var currentTurn = game.Turns.LastOrDefault(t => t.PlayerId == request.PlayerId && t.Scores.Count < 3 && !t.IsBust);
-        
+
         // Initializes a new turn if none exists, or if the previous one is completed
         if (currentTurn == null)
         {
-            var lastTurn = game.Turns.Where(t => t.PlayerId == request.PlayerId).LastOrDefault();
+            // NOTE: only distinguishes 501 vs 301 - a "701" or "170" variant
+            // would silently start at 301 here.
             int startScore = game.Variant == "501" ? 501 : 301;
-            int scoreBefore = lastTurn == null ? startScore : (lastTurn.IsBust ? lastTurn.ScoreBefore : lastTurn.ScoreBefore - lastTurn.Scores.Sum(s => s.Points));
+            int scoreBefore = GetCurrentScoreForPlayer(game, request.PlayerId, startScore);
 
             currentTurn = new Turn
             {
@@ -102,7 +111,6 @@ public class GameService : IGameService
         int currentTurnTotal = currentTurn.Scores.Sum(s => s.Points);
         int scoreBeforeThisThrow = currentTurn.ScoreBefore - currentTurnTotal;
 
-        // Evaluates a winning throw
         if (_rules.IsWinningThrow(scoreBeforeThisThrow, request.Points, request.IsDouble, game.Variant))
         {
             game.EndedAt = DateTime.UtcNow;
@@ -114,7 +122,7 @@ public class GameService : IGameService
             
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
-            await UpdatePlayerStatsAsync(request.PlayerId, game); 
+            await UpdateStatsForLegAsync(game, request.PlayerId);
         }
         // Evaluates a bust throw
         else if (!_rules.IsValidScore(scoreBeforeThisThrow, request.Points, request.IsDouble, game.Variant))
@@ -146,14 +154,20 @@ public class GameService : IGameService
         return true;
     }
 
+    // Whole-visit submission: the frontend numpad sends one combined total
+    // per turn, so this always creates a fresh Turn rather than reusing one
+    // the way SubmitScoreAsync does.
+    //
+    // NOTE: re-implements win/bust/normal inline instead of calling
+    // DartGameRules, and doesn't enforce double-out - a manual "40" entered
+    // from 40 always wins even in a double-out variant.
     public async Task<bool> SubmitManualTurnAsync(SubmitTurnRequest request)
     {
         var game = await _gameRepository.GetByIdAsync(request.GameId);
         if (game == null) return false;
 
-        var lastTurn = game.Turns.Where(t => t.PlayerId == request.PlayerId).LastOrDefault();
         int startScore = game.Variant == "501" ? 501 : 301;
-        int currentScore = lastTurn == null ? startScore : (lastTurn.IsBust ? lastTurn.ScoreBefore : lastTurn.ScoreBefore - lastTurn.Scores.Sum(s => s.Points));
+        int currentScore = GetCurrentScoreForPlayer(game, request.PlayerId, startScore);
 
         var newTurn = new Turn
         {
@@ -163,25 +177,36 @@ public class GameService : IGameService
             Scores = new List<Score>()
         };
 
-        // Validates rules based on the total score of the manual turn
-        if (request.TotalPoints == currentScore) 
+        // A finish only counts if currentScore could legally be checked out
+        // on a double this visit - claiming e.g. "169" as a finish is
+        // impossible (no dart combination reaches exactly zero from a bogey
+        // number on a double), so that's treated as a bust instead of a win.
+        bool reachesZero = request.TotalPoints == currentScore;
+        bool isLegalFinish = reachesZero
+            && (!_rules.RequiresDoubleOut(game.Variant) || _rules.IsCheckoutPossible(currentScore, game.Variant));
+
+        // Each branch pads newTurn.Scores up to 3 entries so every Turn has
+        // the same shape regardless of submission path.
+        if (isLegalFinish)
         {
             game.EndedAt = DateTime.UtcNow;
             game.WinnerId = request.PlayerId;
             newTurn.Scores.Add(new Score { Points = request.TotalPoints, Segment = "Manual", DartNumber = 1 });
-            
+
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 2 });
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 3 });
-            
+
             newTurn.ScoreAfter = 0;
-            
+
             game.Turns.Add(newTurn);
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
-            
-            await UpdatePlayerStatsAsync(request.PlayerId, game);
+
+            await UpdateStatsForLegAsync(game, request.PlayerId);
         }
-        else if (request.TotalPoints > currentScore || (currentScore - request.TotalPoints) == 1) 
+        // Overshooting, leaving exactly 1 (unreachable on a double), or
+        // claiming an impossible checkout is a bust
+        else if (request.TotalPoints > currentScore || (currentScore - request.TotalPoints) == 1 || reachesZero)
         {
             newTurn.IsBust = true;
             newTurn.Scores.Add(new Score { Points = request.TotalPoints, Segment = "Manual Bust", DartNumber = 1 });
@@ -215,23 +240,98 @@ public class GameService : IGameService
         return true;
     }
 
-    private async Task UpdatePlayerStatsAsync(int playerId, Game game)
+    // There's no "leg" entity - a Game's Turns span every leg played back to
+    // back. A leg boundary is the most recent non-bust turn (by anyone) that
+    // reached zero; a player's score is derived only from their own turns
+    // after that point, so a new leg starts back at startScore.
+    private static int GetCurrentScoreForPlayer(Game game, int playerId, int startScore)
+    {
+        var lastLegEndTurn = game.Turns
+            .Where(t => !t.IsBust && t.ScoreAfter == 0)
+            .OrderByDescending(t => t.Id)
+            .FirstOrDefault();
+
+        var lastTurn = game.Turns
+            .Where(t => t.PlayerId == playerId && (lastLegEndTurn == null || t.Id > lastLegEndTurn.Id))
+            .OrderByDescending(t => t.Id)
+            .FirstOrDefault();
+
+        if (lastTurn == null) return startScore;
+        return lastTurn.IsBust ? lastTurn.ScoreBefore : lastTurn.ScoreBefore - lastTurn.Scores.Sum(s => s.Points);
+    }
+
+    // Mirrors the leg-boundary logic in GetCurrentScoreForPlayer above, but
+    // is called right after the leg-ending turn was added - so the most
+    // recent zero-reaching turn IS this leg's end, and we want everything
+    // after the one before that.
+    private static List<Turn> GetCurrentLegTurns(Game game, int playerId)
+    {
+        var legEndTurnIds = game.Turns
+            .Where(t => !t.IsBust && t.ScoreAfter == 0)
+            .OrderByDescending(t => t.Id)
+            .Select(t => t.Id)
+            .ToList();
+
+        int? previousLegEndId = legEndTurnIds.Count >= 2 ? legEndTurnIds[1] : null;
+
+        return game.Turns
+            .Where(t => t.PlayerId == playerId && (previousLegEndId == null || t.Id > previousLegEndId))
+            .ToList();
+    }
+
+    // Updates lifetime stats for every registered Player in the game once a
+    // leg ends - both the winner and whoever they beat threw real darts and
+    // should have their average reflect that. Guest matches leave
+    // game.Players empty (they use in-match ids 1/2 that don't map to real
+    // Player rows - see GuestSessionService), so this is a no-op there.
+    private async Task UpdateStatsForLegAsync(Game game, int winnerId)
+    {
+        foreach (var player in game.Players)
+        {
+            await UpdatePlayerStatsAsync(player.Id, game, isWinner: player.Id == winnerId);
+        }
+    }
+
+    private async Task UpdatePlayerStatsAsync(int playerId, Game game, bool isWinner)
     {
         var player = await _playerRepository.GetByIdAsync(playerId);
         if (player == null) return;
 
-        // Calculates the highest checkout finish
-        var winningTurn = game.Turns.OrderByDescending(t => t.ThrownAt).FirstOrDefault();
-        if (winningTurn != null)
+        // Checkout % is based on whether a double was actually hit, not on
+        // who won: every turn that left this player with a legal shot at a
+        // double finish (per DartGameRules.IsCheckoutPossible) is an
+        // attempt, and it's only a hit if that exact turn ended the leg.
+        // Only the leg that just ended is considered, since this method
+        // re-runs each time any leg in this Game finishes.
+        foreach (var turn in GetCurrentLegTurns(game, playerId))
         {
-            int finishScore = winningTurn.Scores.Sum(s => s.Points);
-            if (finishScore > player.HighestFinish)
+            if (_rules.IsCheckoutPossible(turn.ScoreBefore, game.Variant))
             {
-                player.HighestFinish = finishScore;
+                player.CheckoutAttempts++;
+                if (!turn.IsBust && turn.ScoreAfter == 0) player.CheckoutHits++;
             }
         }
 
-        // Calculates the three-dart average
+        if (player.CheckoutAttempts > 0)
+        {
+            player.CheckoutPercentage = Math.Round((decimal)player.CheckoutHits / player.CheckoutAttempts * 100m, 2);
+        }
+
+        if (isWinner)
+        {
+            // Calculates the highest checkout finish
+            var winningTurn = game.Turns.OrderByDescending(t => t.ThrownAt).FirstOrDefault();
+            if (winningTurn != null)
+            {
+                int finishScore = winningTurn.Scores.Sum(s => s.Points);
+                if (finishScore > player.HighestFinish)
+                {
+                    player.HighestFinish = finishScore;
+                }
+            }
+        }
+
+        // Calculates the three-dart average for THIS game only
         var playerTurns = game.Turns.Where(t => t.PlayerId == playerId).ToList();
         int totalPoints = 0;
         int totalDarts = 0;
@@ -240,14 +340,16 @@ public class GameService : IGameService
         {
             // Bust darts yield zero points but still count towards the total thrown darts
             if (!turn.IsBust) totalPoints += turn.Scores.Sum(s => s.Points);
-            totalDarts += turn.Scores.Count; 
+            totalDarts += turn.Scores.Count;
         }
 
         if (totalDarts > 0)
         {
             decimal gameAverage = ((decimal)totalPoints / totalDarts) * 3;
-            player.ThreeDartAverage = player.ThreeDartAverage == 0 
-                ? Math.Round(gameAverage, 2) 
+            // Simple 50/50 mean with the previous lifetime average, not a
+            // true running average weighted by darts thrown per game.
+            player.ThreeDartAverage = player.ThreeDartAverage == 0
+                ? Math.Round(gameAverage, 2)
                 : Math.Round((player.ThreeDartAverage + gameAverage) / 2m, 2);
         }
 

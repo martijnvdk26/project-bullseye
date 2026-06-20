@@ -10,10 +10,11 @@
 using System;
 using System.Reflection;
 
+[assembly: Microsoft.Extensions.Configuration.UserSecrets.UserSecretsIdAttribute("58ebe208-de1c-47b6-9213-f3197be81a94")]
 [assembly: System.Reflection.AssemblyCompanyAttribute("BullseyeAPI")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4c59117f1e0c60f1a33abe3f5d11784f01bbde45")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+e80a6746456afde7b23c8340e1960da2d7826b0f")]
 [assembly: System.Reflection.AssemblyProductAttribute("BullseyeAPI")]
 [assembly: System.Reflection.AssemblyTitleAttribute("BullseyeAPI")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

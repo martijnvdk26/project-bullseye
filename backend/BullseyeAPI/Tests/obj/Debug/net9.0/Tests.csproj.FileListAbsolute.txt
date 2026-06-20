@@ -124,3 +124,11 @@ C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\obj\Debug\ne
 C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\obj\Debug\net9.0\Tests.pdb
 C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\obj\Debug\net9.0\Tests.genruntimeconfig.cache
 C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\obj\Debug\net9.0\ref\Tests.dll
+C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\bin\Debug\net9.0\Microsoft.AspNetCore.Authentication.JwtBearer.dll
+C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\bin\Debug\net9.0\Microsoft.IdentityModel.Abstractions.dll
+C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\bin\Debug\net9.0\Microsoft.IdentityModel.JsonWebTokens.dll
+C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\bin\Debug\net9.0\Microsoft.IdentityModel.Logging.dll
+C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\bin\Debug\net9.0\Microsoft.IdentityModel.Protocols.dll
+C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\bin\Debug\net9.0\Microsoft.IdentityModel.Protocols.OpenIdConnect.dll
+C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\bin\Debug\net9.0\Microsoft.IdentityModel.Tokens.dll
+C:\Users\marti\Documents\project-bullseye\backend\BullseyeAPI\Tests\bin\Debug\net9.0\System.IdentityModel.Tokens.Jwt.dll

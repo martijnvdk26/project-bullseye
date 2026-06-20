@@ -1,0 +1,32 @@
+<div class="dashboard-wrapper">
+  <div class="dashboard-card">
+    <div class="dashboard-header">
+      <h2>Welcome, {{ authService.currentUser()?.name }}</h2>
+      <p>{{ authService.currentUser()?.email }}</p>
+      <a routerLink="/registered-lobby" class="btn-primary play-link">Play a Match</a>
+      <button class="btn-secondary" (click)="logout()">Log out</button>
+    </div>
+
+    @if (errorMessage) {
+      <div class="api-error">{{ errorMessage }}</div>
+    }
+
+    @if (stats()) {
+      <div class="stats-grid">
+        <div class="stat-box">
+          <span class="stat-value">{{ stats()!.threeDartAverage }}</span>
+          <span class="stat-label">3-Dart Average</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value">{{ stats()!.checkoutPercentage }}%</span>
+          <span class="stat-label">Checkout %</span>
+        </div>
+        <div class="stat-box">
+          <span class="stat-value">{{ stats()!.highestFinish }}</span>
+          <span class="stat-label">Highest Finish</span>
+        </div>
+      </div>
+      <p class="stats-note">Stats fill in as you play games.</p>
+    }
+  </div>
+</div>

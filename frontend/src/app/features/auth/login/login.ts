@@ -2,7 +2,7 @@ import { Component, inject } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormBuilder, ReactiveFormsModule, Validators } from '@angular/forms';
 import { AuthService } from '../../../shared/services/auth';
-import { RouterLink } from '@angular/router';
+import { ActivatedRoute, RouterLink } from '@angular/router';
 
 @Component({
   selector: 'app-login',
@@ -15,9 +15,15 @@ export class LoginComponent {
   // Injecting dependencies using the modern inject() function instead of the constructor
   private fb = inject(FormBuilder);
   private authService = inject(AuthService);
+  private route = inject(ActivatedRoute);
 
   // Holds any error messages returned from the C# API
   errorMessage = '';
+
+  // Shown after a successful registration redirect (see register.ts)
+  successMessage = this.route.snapshot.queryParamMap.get('registered')
+    ? 'Account created — please log in.'
+    : '';
 
   // Set up a Reactive Form with built-in validation rules
   // This prevents invalid data from even reaching the backend

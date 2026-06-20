@@ -7,6 +7,10 @@
 
     <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="auth-form">
 
+      @if (successMessage) {
+        <div class="api-error" style="background-color: #eafaf1; color: #27ae60;">{{ successMessage }}</div>
+      }
+
       <div class="form-group">
         <label for="email">Email Address</label>
         <input
@@ -41,7 +45,7 @@
     </form>
 
     <div class="auth-footer">
-      <p>No account? <a routerLink="/guest-lobby">Play as a Guest via PIN</a></p>
+      <p>No account? <a routerLink="/register">Create one</a> or <a routerLink="/guest-lobby">play as a Guest via PIN</a></p>
     </div>
   </div>
 </div>

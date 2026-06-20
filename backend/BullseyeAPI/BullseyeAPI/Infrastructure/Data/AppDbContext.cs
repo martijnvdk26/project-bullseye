@@ -13,6 +13,7 @@ public class AppDbContext : DbContext
     public DbSet<Score> Scores => Set<Score>();
     public DbSet<Tournament> Tournaments => Set<Tournament>();
     public DbSet<GuestSession> GuestSessions => Set<GuestSession>();
+    public DbSet<RegisteredSession> RegisteredSessions => Set<RegisteredSession>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -22,7 +23,41 @@ public class AppDbContext : DbContext
         modelBuilder.Entity<GuestSession>()
             .HasIndex(g => g.SessionCode)
             .IsUnique();
-            
+
+        // Same uniqueness guarantee for the registered-player lobby's PIN
+        modelBuilder.Entity<RegisteredSession>()
+            .HasIndex(r => r.SessionCode)
+            .IsUnique();
+
+        // Don't cascade-delete a RegisteredSession if one of its players is removed
+        modelBuilder.Entity<RegisteredSession>()
+            .HasOne(r => r.Player1)
+            .WithMany()
+            .HasForeignKey(r => r.Player1Id)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<RegisteredSession>()
+            .HasOne(r => r.Player2)
+            .WithMany()
+            .HasForeignKey(r => r.Player2Id)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<Game>()
+            .HasOne(g => g.RegisteredSession)
+            .WithMany(r => r.Games)
+            .HasForeignKey(g => g.RegisteredSessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        // GuestSessionId became nullable (a Game now belongs to a guest OR a
+        // registered session, never both) - keep the same cascade-on-delete
+        // behavior it had implicitly when the FK was required
+        modelBuilder.Entity<Game>()
+            .HasOne(g => g.GuestSession)
+            .WithMany(gs => gs.Games)
+            .HasForeignKey(g => g.GuestSessionId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+
         // Relatie 1: Game heeft Turns
         modelBuilder.Entity<Game>()
             .HasMany(g => g.Turns)

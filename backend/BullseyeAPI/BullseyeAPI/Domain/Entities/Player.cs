@@ -13,6 +13,13 @@ public class Player
     public decimal ThreeDartAverage { get; set; }
     public decimal CheckoutPercentage { get; set; }
     public decimal HighestFinish { get; set; }
+
+    // Backing counters for CheckoutPercentage: how many turns left this
+    // player with a legal shot at a double finish (per
+    // DartGameRules.IsCheckoutPossible), and how many of those turns
+    // actually ended the leg.
+    public int CheckoutAttempts { get; set; }
+    public int CheckoutHits { get; set; }
     
     // Relations
     public ICollection<Game> Games { get; set; } = new List<Game>();

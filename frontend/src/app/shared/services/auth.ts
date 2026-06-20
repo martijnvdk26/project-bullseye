@@ -4,6 +4,8 @@ import { Router } from '@angular/router';
 import { tap } from 'rxjs/operators';
 import {environment} from '../../../environments/environment'
 
+// Handles the registered-account login session: storing the JWT, exposing
+// the current user, and clearing both on logout.
 @Injectable({
   providedIn: 'root',
 })
@@ -17,9 +19,43 @@ export class AuthService {
   // Using an Angular Signal to hold the current user's state.
   currentUser = signal<{ id: number; name: string; email: string } | null>(null);
 
+  constructor() {
+    // currentUser is otherwise only ever set inside login()'s response
+    // handler, so a page refresh would make every logged-in player look
+    // anonymous again even though their token is still valid in storage.
+    this.restoreSession();
+  }
+
+  private restoreSession() {
+    const token = this.getToken();
+    if (!token) return;
+
+    const playerId = this.decodeSubClaim(token);
+    if (playerId == null) return;
+
+    // Reuses the existing stats endpoint as a "who am I" lookup - it already
+    // returns the full PlayerDto (id/name/email) for an authenticated player
+    this.http.get<any>(`${this.apiUrl}/player/${playerId}/stats`).subscribe({
+      next: (player) => this.currentUser.set(player),
+      error: () => {
+        // Token is stale/invalid - drop it rather than keep failing silently
+        localStorage.removeItem('token');
+      },
+    });
+  }
+
+  private decodeSubClaim(token: string): number | null {
+    try {
+      const payload = JSON.parse(atob(token.split('.')[1]));
+      return payload.sub ? Number(payload.sub) : null;
+    } catch {
+      return null;
+    }
+  }
+
   // Calls the POST api/player/login endpoint
   login(credentials: any) {
-    return this.http.post<any>('/api/player/login', credentials).pipe(
+    return this.http.post<any>(`${this.apiUrl}/player/login`, credentials).pipe(
       // tap() allows us to perform side effects (like saving tokens) without altering the response data
       tap((res) => {
         if (res.token) {
@@ -32,6 +68,12 @@ export class AuthService {
         }
       }),
     );
+  }
+
+  // Calls the POST api/player/register endpoint. Does not log the player in -
+  // they're sent back to /login after a successful registration.
+  register(payload: { name: string; email: string; password: string }) {
+    return this.http.post<any>(`${this.apiUrl}/player/register`, payload);
   }
 
   // Clears the session and boots the user back to the login screen

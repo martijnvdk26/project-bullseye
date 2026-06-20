@@ -1,15 +1,19 @@
-﻿using BullseyeAPI.Application.DTOs;
-using BullseyeAPI.Application.Interfaces;
+﻿using BullseyeAPI.Application.Interfaces;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using System.Threading.Tasks;
 
 namespace BullseyeAPI.Controllers;
 
-// Defines the expected JSON structure from the Angular frontend
+// Defines the expected JSON structure from the Angular frontend. The match
+// rules are chosen by the creator here, before the PIN is shared - the
+// joiner only ever reads them back from the session, never sets them.
 public class CreateGuestSessionRequest
 {
     public string PlayerName { get; set; } = string.Empty;
+    public string Variant { get; set; } = "501";
+    public int TargetSets { get; set; } = 1;
+    public int TargetLegs { get; set; } = 3;
 }
 
 [ApiController]
@@ -27,8 +31,9 @@ public class GuestSessionController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> CreateSession([FromBody] CreateGuestSessionRequest request)
     {
-        // Passes the player name to the service layer for session creation
-        var result = await _guestSessionService.CreateSessionAsync(request.PlayerName);
+        // Passes the player name and chosen match rules to the service layer for session creation
+        var result = await _guestSessionService.CreateSessionAsync(
+            request.PlayerName, request.Variant, request.TargetSets, request.TargetLegs);
         return Ok(result);
     }
 
@@ -47,9 +52,9 @@ public class GuestSessionController : ControllerBase
     }
 
     [HttpPost("{code}/game")]
-    public async Task<IActionResult> StartGame(string code, [FromBody] StartGameRequest request)
+    public async Task<IActionResult> StartGame(string code)
     {
-        var result = await _guestSessionService.StartGameForSessionAsync(code, request);
+        var result = await _guestSessionService.StartGameForSessionAsync(code);
         
         if (result == null)
         {

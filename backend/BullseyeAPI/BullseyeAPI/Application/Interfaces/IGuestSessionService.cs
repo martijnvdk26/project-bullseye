@@ -1,15 +1,15 @@
-﻿using BullseyeAPI.Application.DTOs;
-using System.Threading.Tasks;
+﻿using System.Threading.Tasks;
 
 namespace BullseyeAPI.Application.Interfaces;
 
 public interface IGuestSessionService
 {
-    // Updates the signature to accept the creator's name
-    Task<object> CreateSessionAsync(string playerName);
-    
+    // Accepts the creator's name plus the match rules they chose before the PIN is shared
+    Task<object> CreateSessionAsync(string playerName, string variant, int targetSets, int targetLegs);
+
     // Updates the signature to accept an optional opponent's name
     Task<object?> GetSessionByCodeAsync(string code, string? playerName = null);
-    
-    Task<object?> StartGameForSessionAsync(string code, StartGameRequest request);
+
+    // Match rules now live on the session itself, set once by the creator
+    Task<object?> StartGameForSessionAsync(string code);
 }

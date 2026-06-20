@@ -112,3 +112,25 @@ button {
   letter-spacing: 5px;
   margin: 1rem 0;
 }
+
+/* Read-only rules summary shown to both players once a session exists */
+.rules-summary {
+  font-weight: 600;
+  color: #34495e;
+  background-color: #eef2f5;
+  border-radius: 6px;
+  padding: 0.5rem;
+  display: inline-block;
+}
+
+/* Soft nudge for logged-in players towards the registered lobby */
+.registered-banner {
+  background-color: #fff8e1;
+  border: 1px solid #f0c36d;
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  color: #6d5012;
+}
+.registered-banner a { color: #2980b9; font-weight: 600; }

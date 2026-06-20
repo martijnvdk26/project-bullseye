@@ -7,16 +7,20 @@ namespace BullseyeAPI.Controllers;
 
 [ApiController]
 [Route("api/player")]
-[AllowAnonymous]
 public class PlayerController : ControllerBase
 {
     private readonly IPlayerService _playerService;
+    private readonly IJwtTokenService _jwtTokenService;
+    private readonly IEmailService _emailService;
 
-    public PlayerController(IPlayerService playerService)
+    public PlayerController(IPlayerService playerService, IJwtTokenService jwtTokenService, IEmailService emailService)
     {
         _playerService = playerService;
+        _jwtTokenService = jwtTokenService;
+        _emailService = emailService;
     }
 
+    [AllowAnonymous]
     [HttpPost("register")]
     public async Task<IActionResult> Register([FromBody] RegisterRequest request)
     {
@@ -26,21 +30,30 @@ public class PlayerController : ControllerBase
             // Error 400 if email exists in database
             return BadRequest(new { message = "Registratie is mislukt. Dit e-mailadres is mogelijk al in gebruik." });
         }
-        return Ok(result);
-    }
 
-    [HttpPost("login")]
-    public async Task<IActionResult> Login([FromBody] LoginRequest request)
-    {
-        var result = await _playerService.LoginAsync(request);
-        if (result == null)
+        if (!string.IsNullOrEmpty(result.Email))
         {
-            return Unauthorized(new { message = "Ongeldig e-mailadres of wachtwoord." });
+            await _emailService.SendWelcomeEmailAsync(result.Email, result.Name);
         }
 
         return Ok(result);
     }
 
+    [AllowAnonymous]
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    {
+        var player = await _playerService.LoginAsync(request);
+        if (player == null)
+        {
+            return Unauthorized(new { message = "Ongeldig e-mailadres of wachtwoord." });
+        }
+
+        var token = _jwtTokenService.GenerateToken(player);
+        return Ok(new { token, player });
+    }
+
+    [Authorize]
     [HttpGet("{id}/stats")]
     public async Task<IActionResult> GetStats(int id)
     {

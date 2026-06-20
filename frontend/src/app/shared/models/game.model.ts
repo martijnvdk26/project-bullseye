@@ -10,5 +10,5 @@ export interface Game {
 export interface SubmitTurnRequest {
   gameId: number;
   playerId: number;
-  score: number;
+  totalPoints: number;
 }

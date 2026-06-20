@@ -6,6 +6,13 @@
     <h2>Quick Match Lobby</h2>
     <p class="subtitle">Play a game of darts instantly</p>
 
+    @if (authService.currentUser()) {
+      <div class="registered-banner">
+        Playing with a registered account?
+        <a routerLink="/registered-lobby">Use the Registered Lobby</a> instead for tracked stats.
+      </div>
+    }
+
     <div style="margin-bottom: 2rem;">
       <label style="display: block; text-align: left; margin-bottom: 0.5rem; font-weight: bold; color: #34495e;">Your Name</label>
       <input
@@ -20,36 +27,9 @@
     <div class="lobby-actions">
       <div class="action-section create-section">
         <h3>Start a New Match</h3>
-        <p>Generate a 4-digit PIN to share with your opponent.</p>
-        <button class="btn-primary" (click)="createSession()">Generate PIN</button>
-      </div>
+        <p>Choose the rules, then generate a 4-digit PIN to share with your opponent.</p>
 
-      <div class="divider"><span>OR</span></div>
-
-      <div class="action-section join-section">
-        <h3>Join a Match</h3>
-        <div class="input-group">
-          <input
-            type="text"
-            [(ngModel)]="pinCode"
-            placeholder="E.g. 8430"
-            maxlength="4"
-            class="pin-input"
-          >
-          <button class="btn-secondary" (click)="joinSession()" [disabled]="!pinCode || pinCode.length !== 4">
-            Join
-          </button>
-        </div>
-      </div>
-    </div>
-
-    @if (sessionInfo) {
-      <div class="active-session-box">
-        <h3>Match Ready</h3>
-        <div class="pin-display">{{ sessionInfo.sessionCode }}</div>
-        <p>Share this code. Once both players are ready, set the rules and start.</p>
-
-        <div style="margin: 1.5rem 0; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
+        <div style="margin-bottom: 1rem; display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap;">
           <div>
             <label style="font-weight: bold; display: block; margin-bottom: 0.5rem;">Variant:</label>
             <select [(ngModel)]="selectedVariant" class="pin-input" style="width: 100px; padding: 0.5rem;">
@@ -67,6 +47,42 @@
             <input type="number" [(ngModel)]="targetLegs" min="1" max="11" class="pin-input" style="width: 80px; padding: 0.5rem;">
           </div>
         </div>
+
+        <button class="btn-primary" (click)="createSession()" [disabled]="isSubmitting">Generate PIN</button>
+      </div>
+
+      <div class="divider"><span>OR</span></div>
+
+      <div class="action-section join-section">
+        <h3>Join a Match</h3>
+        <div class="input-group">
+          <input
+            type="text"
+            [(ngModel)]="pinCode"
+            placeholder="E.g. 8430"
+            maxlength="4"
+            class="pin-input"
+          >
+          <button class="btn-secondary" (click)="joinSession()" [disabled]="isSubmitting || !pinCode || pinCode.length !== 4">
+            Join
+          </button>
+        </div>
+      </div>
+    </div>
+
+    @if (sessionInfo) {
+      <div class="active-session-box">
+        <h3>Match Ready</h3>
+        <div class="pin-display">{{ sessionInfo.sessionCode }}</div>
+        <p>Share this code. Once both players are visible below, press Start.</p>
+
+        <div class="rules-summary">
+          {{ sessionInfo.variant }} · Best of {{ sessionInfo.targetSets }} set(s), {{ sessionInfo.targetLegs }} leg(s)
+        </div>
+
+        <p style="margin-top: 1rem;">
+          {{ sessionInfo.player1Name || 'Player 1' }} vs {{ sessionInfo.player2Name || 'waiting for opponent...' }}
+        </p>
 
         <button class="btn-success" (click)="startGame()">Start Game</button>
       </div>
