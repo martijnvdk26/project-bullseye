@@ -14,7 +14,7 @@ import { StatsPanelComponent } from '../stats-panel/stats-panel';
 // Smart container for one live match. The backend is the source of truth
 // for every Turn ever thrown (fetched in full on every loadGameData() call),
 // but legs/sets/whose-turn-it-is are all derived client-side from that
-// history - see loadGameData() and checkLegWinCondition() below.
+// history by replaying it from scratch each time - see replayTurns() below.
 @Component({
   selector: 'app-game-board',
   standalone: true,
@@ -33,23 +33,11 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   private readonly apiUrl = environment.apiUrl;
   private signalRSub!: Subscription;
 
-  // Index into p1Turns/p2Turns marking where the CURRENT leg starts, so
-  // score/dartsThrown can be computed from just this leg while `average`
-  // still uses the full, unsliced turn history.
-  private p1LegStartIndex = 0;
-  private p2LegStartIndex = 0;
-
-  // Total turns (both players combined) already processed by
-  // checkLegWinCondition - see the comment there.
-  private lastProcessedTurnCount = 0;
-
-  // Legs completed so far across the whole match (never reset by a set
-  // rollover, unlike player1.legs/player2.legs). Determines who SHOULD
-  // start the current leg - player 1 on even counts (legs 1, 3, 5...),
-  // player 2 on odd counts (legs 2, 4, 6...) - independent of who actually
-  // won the previous leg. See checkLegWinCondition for why this can't be
-  // derived from raw turn counts alone.
-  private legsPlayedTotal = 0;
+  // Set once the match-winner alert has fired for this component instance,
+  // so a duplicate loadGameData() call for the same final turn (the
+  // submitting browser's own SignalR echo) doesn't pop the alert/navigate
+  // twice.
+  private matchEndHandled = false;
 
   matchId!: number;
   variant: string = '501';
@@ -145,64 +133,28 @@ export class GameBoardComponent implements OnInit, OnDestroy {
       next: (game: any) => {
         this.variant = game.variant || game.Variant || '501';
         const startScore = parseInt(this.variant, 10);
-
         const turns = game.turns || game.Turns || [];
-        const p1Turns = turns.filter((t: any) => (t.playerId || t.PlayerId) === this.player1Id);
-        const p2Turns = turns.filter((t: any) => (t.playerId || t.PlayerId) === this.player2Id);
 
-        // Sums points from valid (non-bust) turns
-        const calculateScored = (playerTurns: any[]) =>
-          playerTurns.reduce((acc: number, turn: any) => {
-            if (turn.isBust || turn.IsBust) return acc;
-            const turnScore = (turn.scores || turn.Scores || []).reduce(
-              (a: number, s: any) => a + (s.points ?? s.Points ?? s.score ?? s.Score ?? 0),
-              0,
-            );
-            return acc + turnScore;
-          }, 0);
+        const state = this.replayTurns(turns, startScore);
 
-        // Average accumulates over the whole match, so it uses every turn -
-        // not just the current leg's slice.
-        const p1Scored = calculateScored(p1Turns);
-        const p2Scored = calculateScored(p2Turns);
+        this.player1.score = state.p1Score;
+        this.player2.score = state.p2Score;
+        this.player1.dartsThrown = state.p1DartsThisLeg;
+        this.player2.dartsThrown = state.p2DartsThisLeg;
+        this.player1.average = state.p1Turns > 0 ? state.p1Scored / state.p1Turns : 0;
+        this.player2.average = state.p2Turns > 0 ? state.p2Scored / state.p2Turns : 0;
+        this.player1.legs = state.player1Legs;
+        this.player2.legs = state.player2Legs;
+        this.player1.sets = state.player1Sets;
+        this.player2.sets = state.player2Sets;
+        this.player1.isActive = state.player1IsActive;
+        this.player2.isActive = state.player2IsActive;
 
-        // Remaining score for the CURRENT leg only: everything thrown since
-        // the last leg boundary (p1LegStartIndex/p2LegStartIndex, advanced in
-        // checkLegWinCondition whenever a leg ends).
-        const p1ScoredThisLeg = calculateScored(p1Turns.slice(this.p1LegStartIndex));
-        const p2ScoredThisLeg = calculateScored(p2Turns.slice(this.p2LegStartIndex));
-
-        this.player1.score = startScore - p1ScoredThisLeg;
-        this.player2.score = startScore - p2ScoredThisLeg;
-
-        this.checkLegWinCondition(startScore, p1Turns.length, p2Turns.length);
-
-        // A numpad turn equals 3 darts. Darts thrown reset each leg (like
-        // score), while average stays cumulative over the whole match.
-        this.player1.dartsThrown = (p1Turns.length - this.p1LegStartIndex) * 3;
-        this.player1.average = p1Turns.length > 0 ? p1Scored / p1Turns.length : 0;
-
-        this.player2.dartsThrown = (p2Turns.length - this.p2LegStartIndex) * 3;
-        this.player2.average = p2Turns.length > 0 ? p2Scored / p2Turns.length : 0;
-
-        // Relies on every visit producing exactly one Turn row (see
-        // processSubmittedScore below). Whoever should start THIS leg
-        // (legStarter, alternating strictly by leg number) is active once
-        // they and the other player have thrown the same number of turns
-        // since the leg began; the other player is active after the
-        // starter has thrown one more. Comparing only within-leg turn
-        // counts (not the whole match) keeps this correct even when the
-        // player who didn't start a leg ends up winning it.
-        const legStarter = this.legsPlayedTotal % 2 === 0 ? this.player1Id : this.player2Id;
-        const p1ThisLegTurns = p1Turns.length - this.p1LegStartIndex;
-        const p2ThisLegTurns = p2Turns.length - this.p2LegStartIndex;
-
-        if (legStarter === this.player1Id) {
-          this.player1.isActive = p1ThisLegTurns === p2ThisLegTurns;
-          this.player2.isActive = p1ThisLegTurns > p2ThisLegTurns;
-        } else {
-          this.player2.isActive = p1ThisLegTurns === p2ThisLegTurns;
-          this.player1.isActive = p2ThisLegTurns > p1ThisLegTurns;
+        if (state.matchWinnerId !== null && !this.matchEndHandled) {
+          this.matchEndHandled = true;
+          const winnerName = state.matchWinnerId === this.player1Id ? this.player1.name : this.player2.name;
+          alert(`${winnerName} wins the match!`);
+          this.leaveMatch();
         }
 
         // No zone.js, so nothing re-renders unless asked explicitly.
@@ -212,61 +164,117 @@ export class GameBoardComponent implements OnInit, OnDestroy {
     });
   }
 
-  // legs/sets/targetLegs/targetSets only ever live as in-memory fields on
-  // this component - never sent to or read from the backend. Each browser
-  // watching the same match derives its own counters from the same raw turn
-  // history, so they stay in sync only as long as every browser processes
-  // the same sequence of loadGameData() calls (e.g. a missed SignalR update
-  // could leave one browser's leg count behind the other's).
-  checkLegWinCondition(startScore: number, p1TurnCount: number, p2TurnCount: number) {
-    // loadGameData() can run more than once for the same checkout (the
-    // submitting browser gets its own "GameUpdated" broadcast echoed back to
-    // it, on top of the reload it already triggers directly). Without this
-    // guard a single leg win would get processed twice.
-    const totalTurns = p1TurnCount + p2TurnCount;
-    if (totalTurns === this.lastProcessedTurnCount) {
-      return;
-    }
-    this.lastProcessedTurnCount = totalTurns;
+  // legs/sets/targetLegs/targetSets are never sent to or read from the
+  // backend - the backend only stores the raw Turn history. So every
+  // browser watching the same match must derive identical leg/set/starter
+  // state from that same history, every time it loads. Rather than
+  // incrementally mutating counters across loadGameData() calls (fragile -
+  // a page refresh or remount mid-match would reset those counters to zero
+  // and break the leg-starter alternation, e.g. the dartbot suddenly
+  // "forgetting" it's supposed to start the even legs), this replays the
+  // entire turn history from scratch on every call using Turn.Id as the
+  // authoritative chronological order, so the result only ever depends on
+  // the backend data, never on this component's prior in-memory state.
+  private replayTurns(turns: any[], startScore: number) {
+    const sortedTurns = [...turns].sort((a, b) => (a.id ?? a.Id) - (b.id ?? b.Id));
 
-    if (this.player1.score === 0) {
-      this.player1.legs++;
-      this.legsPlayedTotal++;
-      this.p1LegStartIndex = p1TurnCount;
-      this.p2LegStartIndex = p2TurnCount;
-      this.resetLegScores(startScore);
-    } else if (this.player2.score === 0) {
-      this.player2.legs++;
-      this.legsPlayedTotal++;
-      this.p1LegStartIndex = p1TurnCount;
-      this.p2LegStartIndex = p2TurnCount;
-      this.resetLegScores(startScore);
+    let p1Score = startScore;
+    let p2Score = startScore;
+    let p1DartsThisLeg = 0;
+    let p2DartsThisLeg = 0;
+    let p1TurnsThisLeg = 0;
+    let p2TurnsThisLeg = 0;
+    let p1Turns = 0;
+    let p2Turns = 0;
+    let p1Scored = 0;
+    let p2Scored = 0;
+    let player1Legs = 0;
+    let player2Legs = 0;
+    let player1Sets = 0;
+    let player2Sets = 0;
+    let legsPlayedTotal = 0;
+    let matchWinnerId: number | null = null;
+
+    for (const turn of sortedTurns) {
+      const playerId = turn.playerId ?? turn.PlayerId;
+      const isBust = turn.isBust ?? turn.IsBust;
+      const turnScore = (turn.scores || turn.Scores || []).reduce(
+        (a: number, s: any) => a + (s.points ?? s.Points ?? s.score ?? s.Score ?? 0),
+        0,
+      );
+
+      if (playerId === this.player1Id) {
+        p1Turns++;
+        p1DartsThisLeg += 3;
+        p1TurnsThisLeg++;
+        if (!isBust) {
+          p1Scored += turnScore;
+          p1Score -= turnScore;
+        }
+      } else if (playerId === this.player2Id) {
+        p2Turns++;
+        p2DartsThisLeg += 3;
+        p2TurnsThisLeg++;
+        if (!isBust) {
+          p2Scored += turnScore;
+          p2Score -= turnScore;
+        }
+      }
+
+      if (p1Score === 0 || p2Score === 0) {
+        if (p1Score === 0) player1Legs++;
+        else player2Legs++;
+        legsPlayedTotal++;
+
+        p1Score = startScore;
+        p2Score = startScore;
+        p1DartsThisLeg = 0;
+        p2DartsThisLeg = 0;
+        p1TurnsThisLeg = 0;
+        p2TurnsThisLeg = 0;
+
+        if (player1Legs === this.targetLegs) {
+          player1Sets++;
+          player1Legs = 0;
+          player2Legs = 0;
+        } else if (player2Legs === this.targetLegs) {
+          player2Sets++;
+          player1Legs = 0;
+          player2Legs = 0;
+        }
+
+        if (player1Sets === this.targetSets) matchWinnerId = this.player1Id;
+        else if (player2Sets === this.targetSets) matchWinnerId = this.player2Id;
+      }
     }
 
-    if (this.player1.legs === this.targetLegs) {
-      this.player1.sets++;
-      this.player1.legs = 0;
-      this.player2.legs = 0;
-    } else if (this.player2.legs === this.targetLegs) {
-      this.player2.sets++;
-      this.player1.legs = 0;
-      this.player2.legs = 0;
-    }
+    // Whoever should start THIS leg (legStarter, alternating strictly by
+    // leg number across the whole match) is active once they and the other
+    // player have thrown the same number of turns since the leg began; the
+    // other player is active after the starter has thrown one more.
+    const legStarter = legsPlayedTotal % 2 === 0 ? this.player1Id : this.player2Id;
+    const player1IsActive =
+      legStarter === this.player1Id ? p1TurnsThisLeg === p2TurnsThisLeg : p2TurnsThisLeg > p1TurnsThisLeg;
+    const player2IsActive =
+      legStarter === this.player2Id ? p1TurnsThisLeg === p2TurnsThisLeg : p1TurnsThisLeg > p2TurnsThisLeg;
 
-    if (this.player1.sets === this.targetSets) {
-      alert(`${this.player1.name} wins the match!`);
-      this.leaveMatch();
-    } else if (this.player2.sets === this.targetSets) {
-      alert(`${this.player2.name} wins the match!`);
-      this.leaveMatch();
-    }
-  }
-
-  resetLegScores(startScore: number) {
-    // Immediate display reset to avoid a flash of the stale score before
-    // the next loadGameData() recomputes it from the advanced leg index.
-    this.player1.score = startScore;
-    this.player2.score = startScore;
+    return {
+      p1Score,
+      p2Score,
+      p1DartsThisLeg,
+      p2DartsThisLeg,
+      p1Turns,
+      p2Turns,
+      p1Scored,
+      p2Scored,
+      player1Legs,
+      player2Legs,
+      player1Sets,
+      player2Sets,
+      player1IsActive,
+      player2IsActive,
+      matchWinnerId,
+    };
   }
 
   processSubmittedScore(score: number) {
