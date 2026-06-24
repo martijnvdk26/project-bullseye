@@ -1,0 +1,16 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    runs-on: [self-hosted, bullseye-prod]
+    steps:
+      - name: Deploy
+        working-directory: /opt/bullseye
+        run: |
+          git pull --ff-only
+          docker compose up -d --build --remove-orphans
+          docker image prune -f

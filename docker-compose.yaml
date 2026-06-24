@@ -5,10 +5,10 @@ services:
     restart: unless-stopped
     environment:
       POSTGRES_USER: bullseye_admin
-      POSTGRES_PASSWORD: SecretPassword123!
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: bullseyedb
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     volumes:
       - bullseye_db_data:/var/lib/postgresql/data
     networks:
@@ -20,9 +20,9 @@ services:
     restart: unless-stopped
     environment:
       PGADMIN_DEFAULT_EMAIL: martijnvanderkooi@gmail.com
-      PGADMIN_DEFAULT_PASSWORD: Binky-sept23
-    ports:
-      - "81:80"
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD}
+    expose:
+      - "80"
     networks:
       - bullseye-network
     depends_on:
@@ -48,13 +48,12 @@ services:
     container_name: bullseye-backend
     restart: unless-stopped
     environment:
-      ConnectionStrings__DefaultConnection: "Host=database;Database=bullseyedb;Username=bullseye_admin;Password=SecretPassword123!"
+      ConnectionStrings__DefaultConnection: "Host=database;Database=bullseyedb;Username=bullseye_admin;Password=${POSTGRES_PASSWORD}"
       AiService__BaseUrl: "http://ai-service:8000"
-      # Dev-only signing key, same spirit as the hardcoded Postgres/PgAdmin
-      # credentials above - rotate this before any real deployment.
-      Jwt__Key: "Bullseye-Dev-Only-Secret-Key-Please-Rotate-In-Prod-2026!!"
-    ports:
-      - "5245:8080"
+      Jwt__Key: "${JWT_KEY}"
+      Resend__ApiKey: "${RESEND_API_KEY}"
+    expose:
+      - "8080"
     depends_on:
       - database
       - ai-service
@@ -70,6 +69,18 @@ services:
       - "4200:80"
     depends_on:
       - backend
+    networks:
+      - bullseye-network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    container_name: bullseye-cloudflared
+    restart: unless-stopped
+    command: tunnel run
+    environment:
+      TUNNEL_TOKEN: "${CLOUDFLARE_TUNNEL_TOKEN}"
+    depends_on:
+      - frontend
     networks:
       - bullseye-network
 
