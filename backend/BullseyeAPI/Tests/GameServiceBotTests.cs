@@ -41,7 +41,7 @@ public class GameServiceBotTests
     }
 
     [Fact]
-    public async Task SubmitManualTurnAsync_WhenHumanTurnWinsTheLeg_DoesNotTriggerBotTurn()
+    public async Task SubmitManualTurnAsync_WhenHumanTurnWinsTheLeg_TriggersBotsOpeningThrowForNextLeg()
     {
         // Arrange: player 1 is already sitting on a reachable checkout (40)
         var priorTurn = new Turn
@@ -58,12 +58,64 @@ public class GameServiceBotTests
         var aiClient = new FakeAiDartbotClient(totalToReturn: 99);
         var service = CreateService(repository, aiClient);
 
-        // Act: the human checks out exactly on 40
+        // Act: the human checks out exactly on 40, winning leg 1
         await service.SubmitManualTurnAsync(new SubmitTurnRequest { GameId = 1, PlayerId = 1, TotalPoints = 40 });
 
-        // Assert: the leg-ending turn was recorded, but the bot never got a turn
-        Assert.Equal(2, game.Turns.Count);
-        Assert.Equal(1, game.WinnerId);
+        // Assert: per the strict per-leg starter alternation (human starts leg
+        // 1, bot starts leg 2, ...), the bot's opening throw of leg 2 fires
+        // immediately - it must not wait in silence for a human turn that,
+        // per that same alternation, isn't coming until leg 3.
+        Assert.Equal(3, game.Turns.Count);
+        Assert.Equal(1, game.WinnerId); // still records leg 1's winner
+        Assert.Equal(2, game.Turns.ElementAt(2).PlayerId);
+        Assert.Equal(402, game.Turns.ElementAt(2).ScoreAfter); // 501 - 99, fresh leg
+    }
+
+    [Fact]
+    public async Task SubmitManualTurnAsync_WhenBotTurnWinsTheLegItStarted_DoesNotTriggerAnotherBotTurn()
+    {
+        // Arrange: leg 1 already finished (human won it), so leg 2 is in
+        // progress and was opened by the bot per the starter alternation.
+        // The bot is now sitting on a reachable checkout (40).
+        var leg1EndTurn = new Turn
+        {
+            PlayerId = 1,
+            ScoreBefore = 40,
+            ScoreAfter = 0,
+            Scores = new List<Score> { new Score { Points = 40, Segment = "Manual", DartNumber = 1 } },
+        };
+        var botOpeningThrow = new Turn
+        {
+            PlayerId = 2,
+            ScoreBefore = 501,
+            ScoreAfter = 40,
+            Scores = new List<Score> { new Score { Points = 461, Segment = "Bot", DartNumber = 1 } },
+        };
+        var game = new Game
+        {
+            Id = 1,
+            Variant = "501",
+            BotPlayerId = 2,
+            Turns = new List<Turn> { leg1EndTurn, botOpeningThrow },
+        };
+        var repository = new FakeGameRepository(game);
+        // Returns 40 so the bot's reactive response below checks out exactly
+        // (its leg-2 score is 40, set up via botOpeningThrow above).
+        var aiClient = new FakeAiDartbotClient(totalToReturn: 40);
+        var service = CreateService(repository, aiClient);
+
+        // Act: the human throws a non-finishing visit in leg 2; the bot then
+        // responds reactively and, per the fake client, checks out and wins leg 2
+        await service.SubmitManualTurnAsync(new SubmitTurnRequest { GameId = 1, PlayerId = 1, TotalPoints = 60 });
+
+        // Assert: leg 2 ends with the bot's checkout (the 4th turn overall:
+        // leg1EndTurn, botOpeningThrow, the human's leg-2 visit, then the
+        // bot's winning one). Per the alternation, leg 3 must start with the
+        // human, so no further bot turn gets fired - the AI client is only
+        // called once (the reactive response), not twice.
+        Assert.Equal(4, game.Turns.Count);
+        Assert.Equal(2, game.WinnerId);
+        Assert.Equal(1, aiClient.CallCount);
     }
 
     [Fact]
@@ -103,13 +155,31 @@ public class GameServiceBotTests
     private class FakeGameRepository : IGameRepository
     {
         private readonly Game _game;
+        private int _nextId;
 
-        public FakeGameRepository(Game game) => _game = game;
+        public FakeGameRepository(Game game)
+        {
+            _game = game;
+            _nextId = (game.Turns.Count == 0 ? 0 : game.Turns.Max(t => t.Id)) + 1;
+        }
 
         public Task<Game?> GetByIdAsync(int id) => Task.FromResult(id == _game.Id ? _game : null);
         public Task AddAsync(Game game) => Task.CompletedTask;
         public Task UpdateAsync(Game game) => Task.CompletedTask;
-        public Task SaveChangesAsync() => Task.CompletedTask;
+
+        // Mimics EF Core auto-assigning the database-generated Id once a Turn
+        // is actually persisted - GameService's leg-boundary logic
+        // (GetCurrentScoreForPlayer, IsBotTurnToStartLeg) orders by Turn.Id to
+        // find the most recent turn/leg boundary, so tests with multiple
+        // turns need real, increasing Ids just like production data has.
+        public Task SaveChangesAsync()
+        {
+            foreach (var turn in _game.Turns.Where(t => t.Id == 0))
+            {
+                turn.Id = _nextId++;
+            }
+            return Task.CompletedTask;
+        }
     }
 
     // Never expected to be exercised: every test game has an empty Players
