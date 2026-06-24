@@ -61,10 +61,10 @@ public class GameServiceBotTests
         // Act: the human checks out exactly on 40, winning leg 1
         await service.SubmitManualTurnAsync(new SubmitTurnRequest { GameId = 1, PlayerId = 1, TotalPoints = 40 });
 
-        // Assert: per the strict per-leg starter alternation (human starts leg
-        // 1, bot starts leg 2, ...), the bot's opening throw of leg 2 fires
-        // immediately - it must not wait in silence for a human turn that,
-        // per that same alternation, isn't coming until leg 3.
+        // Assert: the bot's reactive response fires immediately as usual, but
+        // since the human's turn just crossed a leg boundary, the bot's score
+        // is computed fresh for leg 2 instead of continuing leg 1's scoring -
+        // this is the bot's opening throw of leg 2.
         Assert.Equal(3, game.Turns.Count);
         Assert.Equal(1, game.WinnerId); // still records leg 1's winner
         Assert.Equal(2, game.Turns.ElementAt(2).PlayerId);
@@ -105,14 +105,12 @@ public class GameServiceBotTests
         var service = CreateService(repository, aiClient);
 
         // Act: the human throws a non-finishing visit in leg 2; the bot then
-        // responds reactively and, per the fake client, checks out and wins leg 2
+        // responds and, per the fake client, checks out and wins leg 2
         await service.SubmitManualTurnAsync(new SubmitTurnRequest { GameId = 1, PlayerId = 1, TotalPoints = 60 });
 
         // Assert: leg 2 ends with the bot's checkout (the 4th turn overall:
         // leg1EndTurn, botOpeningThrow, the human's leg-2 visit, then the
-        // bot's winning one). Per the alternation, leg 3 must start with the
-        // human, so no further bot turn gets fired - the AI client is only
-        // called once (the reactive response), not twice.
+        // bot's winning one) - exactly one bot turn per human turn, never more.
         Assert.Equal(4, game.Turns.Count);
         Assert.Equal(2, game.WinnerId);
         Assert.Equal(1, aiClient.CallCount);

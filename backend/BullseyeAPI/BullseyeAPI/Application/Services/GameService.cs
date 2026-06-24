@@ -170,7 +170,7 @@ public class GameService : IGameService
         await ProcessTurnAsync(game, request.PlayerId, request.TotalPoints);
 
         // Vs-Dartbot games have no server-side "whose turn" state beyond what
-        // GetCurrentScoreForPlayer/leg-boundary detection already give us.
+        // GetCurrentScoreForPlayer's leg-boundary detection already gives us.
         // game.WinnerId is NOT a "game still ongoing" flag here - it gets set
         // on every leg checkout (see ProcessTurnAsync), not just the final
         // match win, since the backend has no concept of legs/sets at all
@@ -178,28 +178,21 @@ public class GameService : IGameService
         // So the bot must keep responding across leg boundaries regardless
         // of game.WinnerId, or it goes silent for the rest of the match the
         // moment leg 1 ends.
-        if (game.BotPlayerId.HasValue)
+        //
+        // A human turn that didn't just win the leg is always immediately
+        // followed by exactly one bot turn, maintaining strict alternation
+        // within the leg. This also covers the bot starting the NEXT leg
+        // when the human's turn just won the current one: by the time this
+        // runs, the leg-ending turn already exists, so GetCurrentScoreForPlayer
+        // resets the bot's score for the new leg automatically - no separate
+        // "is it the bot's turn to start a leg" check is needed, since the
+        // strict per-leg alternation means the bot can never need to start
+        // two legs in a row without an intervening human turn in between. If
+        // the AI service is unreachable, the bot simply skips its turn rather
+        // than blocking or failing the human's request.
+        if (game.BotPlayerId.HasValue && request.PlayerId != game.BotPlayerId.Value)
         {
-            // A human turn that didn't just win the leg is always immediately
-            // followed by exactly one bot turn, maintaining strict alternation
-            // within the leg. If the AI service is unreachable, the bot
-            // simply skips its turn rather than blocking or failing the
-            // human's request.
-            if (request.PlayerId != game.BotPlayerId.Value)
-            {
-                await TriggerBotTurnAsync(game);
-            }
-
-            // The above only covers the bot RESPONDING to a human throw -
-            // it does nothing the moment a new leg starts and the strict
-            // per-leg starter alternation (human starts leg 1, bot starts
-            // leg 2, human leg 3, ... - mirrors the frontend's legStarter
-            // logic in game-board.ts) says the bot should throw first. Fire
-            // that opening throw proactively, since nothing else will.
-            if (IsBotTurnToStartLeg(game))
-            {
-                await TriggerBotTurnAsync(game);
-            }
+            await TriggerBotTurnAsync(game);
         }
 
         // Broadcasts a live update signal to the Angular frontend
@@ -218,29 +211,6 @@ public class GameService : IGameService
         {
             await ProcessTurnAsync(game, game.BotPlayerId.Value, botTotal.Value);
         }
-    }
-
-    // True exactly when a new leg has just started and, per the strict
-    // per-leg starter alternation (counting every leg ever completed in this
-    // game, never reset by a set rollover - same rule the frontend applies),
-    // it's the bot's turn to throw first. False once the bot has already
-    // thrown in the current leg, so this only ever fires once per leg.
-    private static bool IsBotTurnToStartLeg(Game game)
-    {
-        if (!game.BotPlayerId.HasValue) return false;
-
-        var legEndTurnIds = game.Turns
-            .Where(t => !t.IsBust && t.ScoreAfter == 0)
-            .Select(t => t.Id)
-            .ToList();
-
-        bool botShouldStartThisLeg = legEndTurnIds.Count % 2 == 1;
-        if (!botShouldStartThisLeg) return false;
-
-        int lastLegEndId = legEndTurnIds.Count > 0 ? legEndTurnIds.Max() : 0;
-        bool botAlreadyThrewThisLeg = game.Turns.Any(t => t.PlayerId == game.BotPlayerId.Value && t.Id > lastLegEndId);
-
-        return !botAlreadyThrewThisLeg;
     }
 
     // Shared bust/win/normal handling for one (playerId, totalPoints) visit,
