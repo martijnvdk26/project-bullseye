@@ -21,7 +21,7 @@ public class GuestSessionService : IGuestSessionService
         _hubContext = hubContext;
     }
 
-    public async Task<object> CreateSessionAsync(string playerName, string variant, int targetSets, int targetLegs)
+    public async Task<object> CreateSessionAsync(string playerName, string variant, int targetSets, int targetLegs, bool vsBot = false, string botDifficulty = "beginner")
     {
         // Generates a 4-digit PIN that's free in both this table and
         // RegisteredSessions - the two are checked together because a guest
@@ -35,9 +35,14 @@ public class GuestSessionService : IGuestSessionService
         {
             SessionCode = code,
             Player1Name = playerName,
+            // A bot opponent never needs to join via the PIN, so its name is
+            // filled in immediately instead of waiting for GetSessionByCodeAsync
+            Player2Name = vsBot ? "Dartbot" : null,
             Variant = string.IsNullOrEmpty(variant) ? "501" : variant,
             TargetSets = targetSets,
             TargetLegs = targetLegs,
+            VsBot = vsBot,
+            BotDifficulty = string.IsNullOrEmpty(botDifficulty) ? "beginner" : botDifficulty,
             CreatedAt = DateTime.UtcNow
         };
 
@@ -49,9 +54,12 @@ public class GuestSessionService : IGuestSessionService
         {
             sessionCode = session.SessionCode,
             player1Name = session.Player1Name,
+            player2Name = session.Player2Name,
             variant = session.Variant,
             targetSets = session.TargetSets,
-            targetLegs = session.TargetLegs
+            targetLegs = session.TargetLegs,
+            vsBot = session.VsBot,
+            botDifficulty = session.BotDifficulty
         };
     }
 
@@ -84,7 +92,8 @@ public class GuestSessionService : IGuestSessionService
             player2Name = session.Player2Name,
             variant = session.Variant,
             targetSets = session.TargetSets,
-            targetLegs = session.TargetLegs
+            targetLegs = session.TargetLegs,
+            vsBot = session.VsBot
         };
     }
 
@@ -109,7 +118,11 @@ public class GuestSessionService : IGuestSessionService
         var newGame = new Game
         {
             Variant = session.Variant,
-            StartedAt = DateTime.UtcNow
+            StartedAt = DateTime.UtcNow,
+            // Guest convention: the opponent is always in-match PlayerId 2,
+            // whether that's a joined human or, here, the Dartbot
+            BotPlayerId = session.VsBot ? 2 : null,
+            BotDifficulty = session.BotDifficulty
         };
 
         // Links the newly created match to this specific guest session

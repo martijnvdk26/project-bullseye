@@ -28,6 +28,51 @@ services:
     depends_on:
       - database
 
+  # Python Dartbot/Computer Vision microservice. Deliberately has no "ports"
+  # mapping (only "expose") so it's reachable from the backend over the
+  # internal Docker network but never directly from the host - see R03 in
+  # the report's risk analysis.
+  ai-service:
+    build:
+      context: ./ai-service
+    container_name: bullseye-ai-service
+    restart: unless-stopped
+    expose:
+      - "8000"
+    networks:
+      - bullseye-network
+
+  backend:
+    build:
+      context: ./backend/BullseyeAPI
+    container_name: bullseye-backend
+    restart: unless-stopped
+    environment:
+      ConnectionStrings__DefaultConnection: "Host=database;Database=bullseyedb;Username=bullseye_admin;Password=SecretPassword123!"
+      AiService__BaseUrl: "http://ai-service:8000"
+      # Dev-only signing key, same spirit as the hardcoded Postgres/PgAdmin
+      # credentials above - rotate this before any real deployment.
+      Jwt__Key: "Bullseye-Dev-Only-Secret-Key-Please-Rotate-In-Prod-2026!!"
+    ports:
+      - "5245:8080"
+    depends_on:
+      - database
+      - ai-service
+    networks:
+      - bullseye-network
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: bullseye-frontend
+    restart: unless-stopped
+    ports:
+      - "4200:80"
+    depends_on:
+      - backend
+    networks:
+      - bullseye-network
+
 volumes:
   bullseye_db_data:
     name: bullseye_db_data

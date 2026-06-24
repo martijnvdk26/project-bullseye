@@ -21,5 +21,12 @@ public class RegisteredSession
     public int TargetSets { get; set; } = 1;
     public int TargetLegs { get; set; } = 3;
 
+    // True when Player1 chose to play against the Dartbot instead of waiting
+    // for a second registered player to join via the PIN.
+    public bool VsBot { get; set; }
+
+    // "beginner" | "semi" | "pro" - chosen by Player1 alongside VsBot.
+    public string BotDifficulty { get; set; } = "beginner";
+
     public ICollection<Game> Games { get; set; } = new List<Game>();
 }

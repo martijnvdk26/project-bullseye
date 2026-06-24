@@ -21,7 +21,7 @@ public class RegisteredSessionService : IRegisteredSessionService
         _hubContext = hubContext;
     }
 
-    public async Task<object> CreateSessionAsync(int player1Id, string variant, int targetSets, int targetLegs)
+    public async Task<object> CreateSessionAsync(int player1Id, string variant, int targetSets, int targetLegs, bool vsBot = false, string botDifficulty = "beginner")
     {
         // Checked against GuestSessions too - see the comment on the
         // equivalent method in GuestSessionService for why
@@ -34,8 +34,19 @@ public class RegisteredSessionService : IRegisteredSessionService
             Variant = string.IsNullOrEmpty(variant) ? "501" : variant,
             TargetSets = targetSets,
             TargetLegs = targetLegs,
+            VsBot = vsBot,
+            BotDifficulty = string.IsNullOrEmpty(botDifficulty) ? "beginner" : botDifficulty,
             CreatedAt = DateTime.UtcNow
         };
+
+        // A bot opponent never needs to join via the PIN, so Player2 is
+        // filled in immediately with the shared Dartbot account
+        if (vsBot)
+        {
+            var dartbot = await GetOrCreateDartbotPlayerAsync();
+            session.Player2Id = dartbot.Id;
+            session.Player2 = dartbot;
+        }
 
         _context.RegisteredSessions.Add(session);
         await _context.SaveChangesAsync();
@@ -47,10 +58,33 @@ public class RegisteredSessionService : IRegisteredSessionService
             sessionCode = session.SessionCode,
             player1Id = session.Player1Id,
             player1Name = player1?.Name ?? string.Empty,
+            player2Id = session.Player2Id,
+            player2Name = session.Player2?.Name,
             variant = session.Variant,
             targetSets = session.TargetSets,
-            targetLegs = session.TargetLegs
+            targetLegs = session.TargetLegs,
+            vsBot = session.VsBot,
+            botDifficulty = session.BotDifficulty
         };
+    }
+
+    // The Dartbot opponent is a single shared Player row (IsBot = true)
+    // reused across every registered vs-bot game, rather than creating a new
+    // bot account per match.
+    private async Task<Player> GetOrCreateDartbotPlayerAsync()
+    {
+        var dartbot = await _context.Players.FirstOrDefaultAsync(p => p.IsBot);
+        if (dartbot != null) return dartbot;
+
+        dartbot = new Player
+        {
+            Name = "Dartbot",
+            IsBot = true,
+            CreatedAt = DateTime.UtcNow
+        };
+        _context.Players.Add(dartbot);
+        await _context.SaveChangesAsync();
+        return dartbot;
     }
 
     public async Task<object?> GetSessionByCodeAsync(string code, int joiningPlayerId)
@@ -111,7 +145,9 @@ public class RegisteredSessionService : IRegisteredSessionService
         var newGame = new Game
         {
             Variant = session.Variant,
-            StartedAt = DateTime.UtcNow
+            StartedAt = DateTime.UtcNow,
+            BotPlayerId = session.VsBot ? session.Player2Id : null,
+            BotDifficulty = session.BotDifficulty
         };
 
         newGame.Players.Add(session.Player1);

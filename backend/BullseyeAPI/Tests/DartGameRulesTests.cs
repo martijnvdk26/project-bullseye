@@ -12,19 +12,20 @@ public class DartGameRulesTests
         _rules = new DartGameRules();
     }
     
-    #region RequiresDoubleOut Tests (5 test cases)
+    #region RequiresDoubleOut Tests (6 test cases)
 
     [Theory]
     [InlineData("501", true)]
     [InlineData("301", true)]
     [InlineData("170", true)]
+    [InlineData("701", true)]
     [InlineData("Around the clock", false)]
     [InlineData("Bob's 27", false)]
     public void RequiresDoubleOut_ShouldReturnExpectedResult_ForVariants(string variant, bool expected)
     {
         // Act
         bool result = _rules.RequiresDoubleOut(variant);
-        
+
         Assert.Equal(expected, result);
     }
     #endregion
@@ -44,6 +45,25 @@ public class DartGameRulesTests
     {
         // Act
         bool result = _rules.IsWinningThrow(currentScore, thrownValue, isDouble, variant);
+
+        // Assert
+        Assert.Equal(expected, result);
+    }
+
+    #endregion
+
+    #region IsCheckoutPossible Tests (5 testgevallen)
+
+    [Theory]
+    [InlineData(170, "501", true)]                  // Hoogste mogelijke finish: T20, T20, Bull
+    [InlineData(169, "501", false)]                  // Bogey-getal: onmogelijk op een dubbel te eindigen
+    [InlineData(1, "501", false)]                    // Te laag: kleinste dubbel is 2
+    [InlineData(171, "501", false)]                  // Te hoog: groter dan het hoogst mogelijke finish-bereik
+    [InlineData(100, "Around the Clock", false)]     // Geen dubbel-uit vereist in deze variant
+    public void IsCheckoutPossible_ShouldReturnExpectedResult(int remainingScore, string variant, bool expected)
+    {
+        // Act
+        bool result = _rules.IsCheckoutPossible(remainingScore, variant);
 
         // Assert
         Assert.Equal(expected, result);
@@ -92,11 +112,22 @@ public class DartGameRulesTests
     [Fact]
     public void IsWinningThrow_WhenThrownValueExceedsCurrentScore_ShouldReturnFalse()
     {
-        // Act 
+        // Act
         bool result = _rules.IsWinningThrow(10, 60, true, "501");
 
         // Assert
         Assert.False(result);
+    }
+
+    [Fact]
+    public void IsValidScore_WhenLeavingOne_InNonDoubleOutVariant_ShouldBeValid()
+    {
+        // Act (in een informele variant zoals "Around the Clock" is 1 overhouden
+        // geen bust, want er is geen dubbel-uit vereiste)
+        bool result = _rules.IsValidScore(10, 9, false, "Around the Clock");
+
+        // Assert
+        Assert.True(result);
     }
 
     #endregion

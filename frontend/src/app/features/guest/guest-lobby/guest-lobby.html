@@ -48,6 +48,22 @@
           </div>
         </div>
 
+        <label style="display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-bottom: 1rem; font-weight: bold; color: #34495e;">
+          <input type="checkbox" [(ngModel)]="vsBot">
+          Play vs Dartbot
+        </label>
+
+        @if (vsBot) {
+          <div style="margin-bottom: 1rem;">
+            <label style="font-weight: bold; display: block; margin-bottom: 0.5rem;">Bot difficulty:</label>
+            <select [(ngModel)]="botDifficulty" class="pin-input" style="width: 140px; padding: 0.5rem;">
+              <option value="beginner">Beginner</option>
+              <option value="semi">Semi-pro</option>
+              <option value="pro">Pro</option>
+            </select>
+          </div>
+        }
+
         <button class="btn-primary" (click)="createSession()" [disabled]="isSubmitting">Generate PIN</button>
       </div>
 

@@ -8,7 +8,11 @@ public class Player
     public string? Password { get; set; }
     public string? AvatarUrl { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
-    
+
+    // True for the single, shared "Dartbot" Player row used as the computer
+    // opponent in registered vs-bot games (see RegisteredSessionService).
+    public bool IsBot { get; set; }
+
     //Statistics
     public decimal ThreeDartAverage { get; set; }
     public decimal CheckoutPercentage { get; set; }

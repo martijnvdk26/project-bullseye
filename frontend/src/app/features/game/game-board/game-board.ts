@@ -67,6 +67,11 @@ export class GameBoardComponent implements OnInit, OnDestroy {
   player1Id = 1;
   player2Id = 2;
 
+  // Camera mode has no Computer Vision behind it yet (Future Work) - it's
+  // here so the score-input toggle itself is real, while manual entry stays
+  // the only way to actually submit a score.
+  inputMode: 'manual' | 'camera' = 'manual';
+
   player1 = {
     name: 'PLAYER 1',
     score: 501,

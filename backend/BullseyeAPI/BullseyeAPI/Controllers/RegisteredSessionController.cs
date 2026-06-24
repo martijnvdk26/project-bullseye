@@ -14,6 +14,13 @@ public class CreateRegisteredSessionRequest
     public string Variant { get; set; } = "501";
     public int TargetSets { get; set; } = 1;
     public int TargetLegs { get; set; } = 3;
+
+    // When true, the session's opponent slot is filled by the Dartbot
+    // instead of waiting for a second registered player to join via the PIN.
+    public bool VsBot { get; set; } = false;
+
+    // "beginner" | "semi" | "pro" - only used when VsBot is true.
+    public string BotDifficulty { get; set; } = "beginner";
 }
 
 [ApiController]
@@ -33,7 +40,7 @@ public class RegisteredSessionController : ControllerBase
     {
         var playerId = GetCurrentPlayerId();
         var result = await _registeredSessionService.CreateSessionAsync(
-            playerId, request.Variant, request.TargetSets, request.TargetLegs);
+            playerId, request.Variant, request.TargetSets, request.TargetLegs, request.VsBot, request.BotDifficulty);
         return Ok(result);
     }
 

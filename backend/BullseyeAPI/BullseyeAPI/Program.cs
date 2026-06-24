@@ -38,6 +38,7 @@ builder.Services.AddScoped<IPlayerRepository, PlayerRepository>();
 builder.Services.AddScoped<IPlayerService, PlayerService>();
 builder.Services.AddScoped<IJwtTokenService, JwtTokenService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddHttpClient<IAiDartbotClient, AiDartbotClient>();
 builder.Services.AddHttpClient();
 
 builder.Services.AddSignalR();
@@ -71,6 +72,15 @@ builder.Services.AddAuthentication(options =>
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+// Applies any pending migrations on startup so a fresh deployment (e.g. a
+// brand new `docker-compose up --build`) doesn't need a separate manual
+// `dotnet ef database update` step before the API can serve requests.
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+    db.Database.Migrate();
+}
 
 app.UseCors("AllowAngular");
 

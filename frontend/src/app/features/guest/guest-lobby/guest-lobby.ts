@@ -50,6 +50,8 @@ export class GuestLobbyComponent implements OnDestroy {
   selectedVariant = '501';
   targetLegs = 3;
   targetSets = 1;
+  vsBot = false;
+  botDifficulty = 'beginner';
 
   // Stores the session data returned by the API
   sessionInfo: any = null;
@@ -73,6 +75,8 @@ export class GuestLobbyComponent implements OnDestroy {
       variant: this.selectedVariant,
       targetSets: this.targetSets,
       targetLegs: this.targetLegs,
+      vsBot: this.vsBot,
+      botDifficulty: this.botDifficulty,
     }).subscribe({
       next: (res: any) => {
         this.sessionInfo = res;

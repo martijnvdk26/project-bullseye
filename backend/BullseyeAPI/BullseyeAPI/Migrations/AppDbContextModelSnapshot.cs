@@ -30,6 +30,13 @@ namespace BullseyeAPI.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BotDifficulty")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<int?>("BotPlayerId")
+                        .HasColumnType("integer");
+
                     b.Property<DateTime?>("EndedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -73,6 +80,10 @@ namespace BullseyeAPI.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BotDifficulty")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -96,6 +107,9 @@ namespace BullseyeAPI.Migrations
                     b.Property<string>("Variant")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("VsBot")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 
@@ -134,6 +148,9 @@ namespace BullseyeAPI.Migrations
                     b.Property<decimal>("HighestFinish")
                         .HasColumnType("numeric");
 
+                    b.Property<bool>("IsBot")
+                        .HasColumnType("boolean");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasColumnType("text");
@@ -157,6 +174,10 @@ namespace BullseyeAPI.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
+                    b.Property<string>("BotDifficulty")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
@@ -179,6 +200,9 @@ namespace BullseyeAPI.Migrations
                     b.Property<string>("Variant")
                         .IsRequired()
                         .HasColumnType("text");
+
+                    b.Property<bool>("VsBot")
+                        .HasColumnType("boolean");
 
                     b.HasKey("Id");
 

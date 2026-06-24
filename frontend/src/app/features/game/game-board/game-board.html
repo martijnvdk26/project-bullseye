@@ -35,6 +35,15 @@
 
   </div>
 
-  <app-numpad (scoreSubmitted)="processSubmittedScore($event)"></app-numpad>
+  <div class="input-mode-toggle">
+    <button class="mode-btn" [class.active]="inputMode === 'manual'" (click)="inputMode = 'manual'">Manual</button>
+    <button class="mode-btn" [class.active]="inputMode === 'camera'" (click)="inputMode = 'camera'">Camera</button>
+  </div>
+
+  @if (inputMode === 'manual') {
+    <app-numpad (scoreSubmitted)="processSubmittedScore($event)"></app-numpad>
+  } @else {
+    <div class="camera-placeholder">Camera score detection coming soon</div>
+  }
 
 </div>

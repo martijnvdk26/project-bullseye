@@ -25,17 +25,20 @@ public class GameService : IGameService
     private readonly DartGameRules _rules;
     private readonly IPlayerRepository _playerRepository;
     private readonly IHubContext<GameHub> _hubContext;
+    private readonly IAiDartbotClient _aiDartbotClient;
 
     public GameService(
-        IGameRepository gameRepository, 
-        DartGameRules rules, 
+        IGameRepository gameRepository,
+        DartGameRules rules,
         IPlayerRepository playerRepository,
-        IHubContext<GameHub> hubContext)
+        IHubContext<GameHub> hubContext,
+        IAiDartbotClient aiDartbotClient)
     {
         _gameRepository = gameRepository;
         _rules = rules;
         _playerRepository = playerRepository;
         _hubContext = hubContext;
+        _aiDartbotClient = aiDartbotClient;
     }
 
     public async Task<GameDto?> GetGameAsync(int gameId)
@@ -156,22 +159,59 @@ public class GameService : IGameService
 
     // Whole-visit submission: the frontend numpad sends one combined total
     // per turn, so this always creates a fresh Turn rather than reusing one
-    // the way SubmitScoreAsync does.
-    //
-    // NOTE: re-implements win/bust/normal inline instead of calling
-    // DartGameRules, and doesn't enforce double-out - a manual "40" entered
-    // from 40 always wins even in a double-out variant.
+    // the way SubmitScoreAsync does. Delegates the actual bust/win/score
+    // handling to ProcessTurnAsync below, which is shared with the Dartbot
+    // turn triggered right after, so both paths run through identical rules.
     public async Task<bool> SubmitManualTurnAsync(SubmitTurnRequest request)
     {
         var game = await _gameRepository.GetByIdAsync(request.GameId);
         if (game == null) return false;
 
+        await ProcessTurnAsync(game, request.PlayerId, request.TotalPoints);
+
+        // Vs-Dartbot games have no server-side "whose turn" state (see the
+        // class-level note); instead we rely on the human always starting
+        // every leg, so a human turn that didn't just win the leg is always
+        // immediately followed by exactly one bot turn. If the AI service is
+        // unreachable, the bot simply skips its turn rather than blocking or
+        // failing the human's request.
+        if (game.BotPlayerId.HasValue && game.WinnerId == null && request.PlayerId != game.BotPlayerId.Value)
+        {
+            int startScore = game.Variant == "501" ? 501 : 301;
+            int botCurrentScore = GetCurrentScoreForPlayer(game, game.BotPlayerId.Value, startScore);
+
+            var botTotal = await _aiDartbotClient.GetBotTurnTotalAsync(botCurrentScore, game.Variant, game.BotDifficulty);
+            if (botTotal.HasValue)
+            {
+                await ProcessTurnAsync(game, game.BotPlayerId.Value, botTotal.Value);
+            }
+        }
+
+        // Broadcasts a live update signal to the Angular frontend
+        await _hubContext.Clients.All.SendAsync("GameUpdated", game.Id);
+
+        return true;
+    }
+
+    // Shared bust/win/normal handling for one (playerId, totalPoints) visit,
+    // used by both a human's manual turn and the Dartbot's auto-generated
+    // turn above.
+    //
+    // NOTE: re-implements win/bust/normal inline instead of calling
+    // DartGameRules, and doesn't enforce double-out - a manual "40" entered
+    // from 40 always wins even in a double-out variant.
+    private async Task ProcessTurnAsync(Game game, int playerId, int totalPoints)
+    {
         int startScore = game.Variant == "501" ? 501 : 301;
-        int currentScore = GetCurrentScoreForPlayer(game, request.PlayerId, startScore);
+        int currentScore = GetCurrentScoreForPlayer(game, playerId, startScore);
+
+        bool isBotTurn = game.BotPlayerId.HasValue && playerId == game.BotPlayerId.Value;
+        string segment = isBotTurn ? "Bot" : "Manual";
+        string bustSegment = isBotTurn ? "Bot Bust" : "Manual Bust";
 
         var newTurn = new Turn
         {
-            PlayerId = request.PlayerId,
+            PlayerId = playerId,
             ScoreBefore = currentScore,
             ThrownAt = DateTime.UtcNow,
             Scores = new List<Score>()
@@ -181,7 +221,7 @@ public class GameService : IGameService
         // on a double this visit - claiming e.g. "169" as a finish is
         // impossible (no dart combination reaches exactly zero from a bogey
         // number on a double), so that's treated as a bust instead of a win.
-        bool reachesZero = request.TotalPoints == currentScore;
+        bool reachesZero = totalPoints == currentScore;
         bool isLegalFinish = reachesZero
             && (!_rules.RequiresDoubleOut(game.Variant) || _rules.IsCheckoutPossible(currentScore, game.Variant));
 
@@ -190,8 +230,8 @@ public class GameService : IGameService
         if (isLegalFinish)
         {
             game.EndedAt = DateTime.UtcNow;
-            game.WinnerId = request.PlayerId;
-            newTurn.Scores.Add(new Score { Points = request.TotalPoints, Segment = "Manual", DartNumber = 1 });
+            game.WinnerId = playerId;
+            newTurn.Scores.Add(new Score { Points = totalPoints, Segment = segment, DartNumber = 1 });
 
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 2 });
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 3 });
@@ -202,42 +242,37 @@ public class GameService : IGameService
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
 
-            await UpdateStatsForLegAsync(game, request.PlayerId);
+            await UpdateStatsForLegAsync(game, playerId);
         }
         // Overshooting, leaving exactly 1 (unreachable on a double), or
         // claiming an impossible checkout is a bust
-        else if (request.TotalPoints > currentScore || (currentScore - request.TotalPoints) == 1 || reachesZero)
+        else if (totalPoints > currentScore || (currentScore - totalPoints) == 1 || reachesZero)
         {
             newTurn.IsBust = true;
-            newTurn.Scores.Add(new Score { Points = request.TotalPoints, Segment = "Manual Bust", DartNumber = 1 });
-            
+            newTurn.Scores.Add(new Score { Points = totalPoints, Segment = bustSegment, DartNumber = 1 });
+
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 2 });
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 3 });
-            
+
             newTurn.ScoreAfter = newTurn.ScoreBefore;
-            
+
             game.Turns.Add(newTurn);
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
         }
-        else 
+        else
         {
-            newTurn.Scores.Add(new Score { Points = request.TotalPoints, Segment = "Manual", DartNumber = 1 });
-            
+            newTurn.Scores.Add(new Score { Points = totalPoints, Segment = segment, DartNumber = 1 });
+
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 2 });
             if (newTurn.Scores.Count < 3) newTurn.Scores.Add(new Score { Points = 0, Segment = "-", DartNumber = 3 });
-            
-            newTurn.ScoreAfter = newTurn.ScoreBefore - request.TotalPoints;
-            
+
+            newTurn.ScoreAfter = newTurn.ScoreBefore - totalPoints;
+
             game.Turns.Add(newTurn);
             await _gameRepository.UpdateAsync(game);
             await _gameRepository.SaveChangesAsync();
         }
-
-        // Broadcasts a live update signal to the Angular frontend
-        await _hubContext.Clients.All.SendAsync("GameUpdated", game.Id);
-
-        return true;
     }
 
     // There's no "leg" entity - a Game's Turns span every leg played back to
