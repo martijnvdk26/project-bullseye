@@ -3,6 +3,7 @@ import { Routes } from '@angular/router';
 // Import all your components traditionally at the top
 import { LoginComponent } from './features/auth/login/login';
 import { RegisterComponent } from './features/auth/register/register';
+import { VerifyEmailComponent } from './features/auth/verify-email/verify-email';
 import { DashboardComponent } from './features/dashboard/dashboard';
 import { GuestLobbyComponent } from './features/guest/guest-lobby/guest-lobby';
 import { RegisteredLobbyComponent } from './features/registered-lobby/registered-lobby/registered-lobby';
@@ -16,6 +17,7 @@ export const routes: Routes = [
   // 2. Public routes
   { path: 'login', component: LoginComponent },
   { path: 'register', component: RegisterComponent },
+  { path: 'verify-email', component: VerifyEmailComponent },
   { path: 'guest-lobby', component: GuestLobbyComponent },
 
   // 3. Requires a logged-in registered player

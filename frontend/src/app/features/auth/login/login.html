@@ -39,6 +39,16 @@
         <div class="api-error">{{ errorMessage }}</div>
       }
 
+      @if (showResend) {
+        <button type="button" class="btn-primary" style="background-color: #7f8c8d; margin-bottom: 1rem;" (click)="onResend()">
+          Resend verification email
+        </button>
+      }
+
+      @if (resendMessage) {
+        <div class="api-error" style="background-color: #eafaf1; color: #27ae60;">{{ resendMessage }}</div>
+      }
+
       <button type="submit" class="btn-primary" [disabled]="loginForm.invalid">
         Log In
       </button>

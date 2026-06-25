@@ -52,6 +52,7 @@ services:
       AiService__BaseUrl: "http://ai-service:8000"
       Jwt__Key: "${JWT_KEY}"
       Resend__ApiKey: "${RESEND_API_KEY}"
+      Frontend__BaseUrl: "${FRONTEND_BASE_URL:-http://localhost:4200}"
     expose:
       - "8080"
     depends_on:

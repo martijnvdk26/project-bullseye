@@ -13,6 +13,13 @@ public class Player
     // opponent in registered vs-bot games (see RegisteredSessionService).
     public bool IsBot { get; set; }
 
+    // Gates login: a freshly-registered account starts unverified and can't
+    // log in until the Resend verification link is clicked (see
+    // PlayerService.VerifyEmailAsync).
+    public bool EmailVerified { get; set; }
+    public string? VerificationToken { get; set; }
+    public DateTime? VerificationTokenExpiresAt { get; set; }
+
     //Statistics
     public decimal ThreeDartAverage { get; set; }
     public decimal CheckoutPercentage { get; set; }

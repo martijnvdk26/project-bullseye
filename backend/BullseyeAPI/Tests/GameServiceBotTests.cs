@@ -187,6 +187,7 @@ public class GameServiceBotTests
     {
         public Task<Player?> GetByIdAsync(int id) => throw new NotImplementedException();
         public Task<Player?> GetByEmailAsync(string email) => throw new NotImplementedException();
+        public Task<Player?> GetByVerificationTokenAsync(string token) => throw new NotImplementedException();
         public Task AddAsync(Player player) => throw new NotImplementedException();
         public Task UpdateAsync(Player player) => throw new NotImplementedException();
         public Task SaveChangesAsync() => throw new NotImplementedException();

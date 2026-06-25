@@ -71,9 +71,24 @@ export class AuthService {
   }
 
   // Calls the POST api/player/register endpoint. Does not log the player in -
-  // they're sent back to /login after a successful registration.
+  // a freshly registered account can't log in until the Resend verification
+  // link is clicked, so they're sent back to /login with a "check your inbox"
+  // message instead.
   register(payload: { name: string; email: string; password: string }) {
     return this.http.post<any>(`${this.apiUrl}/player/register`, payload);
+  }
+
+  // Calls the GET api/player/verify-email endpoint hit by the link in the
+  // Resend verification email.
+  verifyEmail(token: string) {
+    return this.http.get<any>(`${this.apiUrl}/player/verify-email`, { params: { token } });
+  }
+
+  // Calls the POST api/player/resend-verification endpoint. Backend always
+  // returns the same generic message regardless of whether the address
+  // exists, so there's nothing account-specific to branch on here.
+  resendVerification(email: string) {
+    return this.http.post<any>(`${this.apiUrl}/player/resend-verification`, { email });
   }
 
   // Clears the session and boots the user back to the login screen

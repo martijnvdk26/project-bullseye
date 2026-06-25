@@ -26,6 +26,10 @@ export class RegisterComponent {
 
   onSubmit() {
     if (this.registerForm.valid) {
+      // The "registered" query param drives the success message shown on the
+      // login page (see login.ts) - it now points players at their inbox
+      // since the account can't log in until the Resend verification link
+      // is clicked.
       this.authService.register(this.registerForm.value as { name: string; email: string; password: string }).subscribe({
         next: () => this.router.navigate(['/login'], { queryParams: { registered: '1' } }),
         error: (err) =>

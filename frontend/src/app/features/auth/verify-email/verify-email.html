@@ -1,0 +1,26 @@
+<div class="auth-wrapper">
+  <div class="auth-card">
+    <div class="auth-header">
+      <h2>Project Bullseye</h2>
+      <p>Email verification</p>
+    </div>
+
+    @if (state === 'verifying') {
+      <p>Verifying your email…</p>
+    }
+
+    @if (state === 'success') {
+      <div class="api-error" style="background-color: #eafaf1; color: #27ae60;">{{ message }}</div>
+      <div class="auth-footer">
+        <p><a routerLink="/login">Go to login</a></p>
+      </div>
+    }
+
+    @if (state === 'error') {
+      <div class="api-error">{{ message }}</div>
+      <div class="auth-footer">
+        <p><a routerLink="/login">Back to login</a></p>
+      </div>
+    }
+  </div>
+</div>

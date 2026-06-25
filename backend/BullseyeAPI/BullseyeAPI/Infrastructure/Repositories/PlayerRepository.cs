@@ -25,6 +25,11 @@ public class PlayerRepository : IPlayerRepository
         return await _context.Players.FirstOrDefaultAsync(p => p.Email == email.ToLower());
     }
 
+    public async Task<Player?> GetByVerificationTokenAsync(string token)
+    {
+        return await _context.Players.FirstOrDefaultAsync(p => p.VerificationToken == token);
+    }
+
     public async Task AddAsync(Player player)
     {
         await _context.Players.AddAsync(player);
